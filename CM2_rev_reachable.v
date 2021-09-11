@@ -178,7 +178,8 @@ Proof.
     split; first by lia. split; first by lia.
     move=> a b Ha Hb.
     have /reaches'_trans := IH a b ltac:(lia) ltac:(lia). apply.
-    exists 1. rewrite /= /step' Hi /=. congr Some. congr pair. congr pair; lia.
+    exists 1. rewrite /= /step' Hi /=.
+    congr Some. congr pair. congr pair; lia.
   - move=> [] q Hi.
     + case H'bx': (value2 x') => [|bx']; last done.
       move=> [<-] /=. exists n, 0.
@@ -218,16 +219,14 @@ Proof.
   move=> n IH x ?. case Hy: (step' x) => [y|].
   - move: (Hy) => /step'_inc_state ?.
     have /IH : (length M - state y = n) by lia.
-    move=> [z] [? ?]. exists z.
-    split; last done.
+    move=> [z] [? ?]. exists z. split; last done.
     move: Hy => /reaches'_step' /reaches'_trans. by apply.
   - exists x. split; first by exists 0.
     move: (reversible_not_avid) Hy => /Forall_forall.
     (* ad hoc, possibly externalize *)
     clear -HM. rewrite /step' /step. case Hi: (nth_error M (state x)) => [i|] H; last done.
     move: Hi => /nth_error_In /H {H}.
-    move: i => []; first done.
-    move=> [] q H.
+    move: i => []; first done. move=> [] q H.
     + move: (value2 x) => [|? ? /=]; first done.
       suff: not (q = S (q - 1) /\ S (q - 1) < length M) by lia.
       by move=> [+] /avidI => <-.
@@ -261,8 +260,23 @@ Proof.
       eexists. split; [reflexivity|move=> /=; lia].
 Qed.
 
+Lemma reaches'stepE {x y z} : reaches' x y -> step y = Some z ->
+    forall a b, (value1 x > 0 <-> a > 0) -> (value2 x > 0 <-> b > 0) ->
+      exists z', reaches (state x, (a, b)) z' /\
+        state z = state z' /\
+        value1 x + value1 z' = a + value1 z /\
+        value2 x + value2 z' = b + value2 z.
+Proof.
+  move=> /reaches'E [n] [m] [?] [?] ++ a b ??.
+  move=> /(_ a b ltac:(lia) ltac:(lia)) /reaches'_incl Hxy.
+  move=> /(step_parallel (state y, (a + n, b + m))) /=.
+  move=> /(_ ltac:(lia)) [z'] [/reaches_step Hyz'] ?.
+  exists z'. split; last by lia.
+  exact: (reaches_trans Hxy Hyz').
+Qed.
+
 (* if (1, 1) f->>t-> (0, 1 + m), then (a, b) t->> (0, a * m + b) *)
-Lemma dec_a_0 x m : reaches' (0, (1, 1)) x -> 
+Lemma dec_a_0 {x m} : reaches' (0, (1, 1)) x -> 
   step x = Some (0, (0, 1 + m)) ->
   forall a b, reaches (0, (a, b)) (0, (0, a * m + b)).
 Proof.
@@ -285,7 +299,7 @@ Proof.
 Qed.
 
 (* if (1, 1) f->>t-> (1 + n, 0), then (a, b) t->> (b * n + a, 0) *)
-Lemma dec_b_0 x n : reaches' (0, (1, 1)) x -> 
+Lemma dec_b_0 {x n} : reaches' (0, (1, 1)) x -> 
   step x = Some (0, (1 + n, 0)) ->
   forall a b, reaches (0, (a, b)) (0, (b * n + a, 0)).
 Proof.
@@ -314,12 +328,10 @@ Lemma dec_a_0' x : reaches' (0, (1, 0)) x ->
 Proof.
   move=> H1x H2x. elim; first by exists 0.
   move=> a IH. apply: (reaches_trans _ IH).
-  move: H1x => /reaches'E.
-  move=> [n'] [m'] /= [Hax] [Hbx] /(_ (S a) 0 ltac:(lia) ltac:(lia)).
-  move=> /reaches'_incl /reaches_trans. apply. exists 1.
-  move: H2x => /(step_parallel (state x, (S a + n', m'))) /= /(_ ltac:(lia)).
-  move=> [[pz [az bz]]] [->] /= [<-] ?.
-  congr (Some (_, (_, _))); lia.
+  have := reaches'stepE H1x H2x (S a) 0.
+  move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz'] ?.
+  apply /(reaches_trans Hz') /reaches_eq.
+  congr (_, (_, _)); lia.
 Qed.
 
 (* if (0, 1) f->>t-> (0, 0), then (0, b) t->> (0, 0) *)
@@ -329,15 +341,13 @@ Lemma dec_b_0' x : reaches' (0, (0, 1)) x ->
 Proof.
   move=> H1x H2x. elim; first by exists 0.
   move=> b IH. apply: (reaches_trans _ IH).
-  move: H1x => /reaches'E.
-  move=> [n'] [m'] /= [Hax] [Hbx] /(_ 0 (S b) ltac:(lia) ltac:(lia)).
-  move=> /reaches'_incl /reaches_trans. apply. exists 1.
-  move: H2x => /(step_parallel (state x, (n', S b + m'))) /= /(_ ltac:(lia)).
-  move=> [[pz [az bz]]] [->] /= [<-] ?.
-  congr (Some (_, (_, _))); lia.
+  have := reaches'stepE H1x H2x 0 (S b).
+  move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz'] ?.
+  apply /(reaches_trans Hz') /reaches_eq.
+  congr (_, (_, _)); lia.
 Qed.
 
-Lemma terminatingI x y : reaches x y -> step y = None -> terminating x.
+Lemma terminatingI {x y} : reaches x y -> step y = None -> terminating x.
 Proof.
   move=> [k Hk] ?. exists (k+1). by move: Hk => /multi_step_plus ->.
 Qed.
@@ -347,17 +357,14 @@ Lemma dec_loop x n m : reaches' (0, (1, 1)) x ->
   step x = Some (0, (1 + n, 1 + m)) ->
   forall a b, non_terminating (0, (a, b)).
 Proof.
-Admitted. (* hard 
-  move=> [k Hk] Hx.
-  move=> a b k' /(multi_step_k_monotone (k' * S k)) /(_ ltac:(lia)).
-  elim: k' a b; first done.
-  move=> k' IH a b. have ->: S k' * S k = (k + 1) + (k' * S k) by lia.
-  have : multi_step (k + 1) (0, (a, b)) = Some (0, (n + a, b + m)).
+  move=> Hx H'x a b k. elim: k a b; first done.
+  move=> k IH a b. have ->: S k = k + 1 by lia.
+  move: Hx => /reaches'E [n'] [m'] /= [Hax] [Hbx].
+  move=> /(_ a b ltac:(lia) ltac:(lia)) /reaches'_incl [k' Hk'].
+  move=> /(multi_step_k_monotone (k'+(1+k))) /(_ ltac:(lia)).
+  have : step (state x, (a + n', b + m')) = Some (0, (n + a, b + m)).
   {
-    move: Hk => /reaches'E [n'] [m'] /= [Hax] [Hbx].
-    move=> /(_ a b ltac:(lia) ltac:(lia)).
-    move=> /multi_step'_incl /multi_step_plus ->.
-    move: Hx. rewrite /= /step. case: (nth_error M (state x)); last done.
+    move: H'x. rewrite /= /step. case: (nth_error M (state x)); last done.
     move=> [].
     - move=> c [] /= -> ??. congr (Some (_, (_, _))); lia.
     - move=> [] q.
@@ -369,10 +376,10 @@ Admitted. (* hard
         move=> [->] ?? /=.
         have ->: a + n' = S (n + a) by lia.
         congr (Some (_, (_, _))); lia.
-    }
-    move=> /multi_step_plus ->. by apply: IH.
+  }
+  move: Hk' => /multi_step_plus -> /(multi_step_plus 1) ->.
+  by apply: IH.
 Qed.
-*)
 
 (* x f->> HALT (without jumps) *)
 Lemma reaches'_None_terminating x y :
@@ -393,11 +400,8 @@ Lemma reaches'_Some_terminating x y z :
     terminating (state x, (a, b)).
 Proof.
   move=> Hxy Hy Hz a b ? ?.
-  move: Hxy => /reaches'E [n] [m] /= [?] [?].
-  move=> /(_ a b ltac:(lia) ltac:(lia)) /reaches'_incl /reaches_trans H.
-  move: Hy => /(step_parallel (state y, (a + n, b + m))) /= /(_ ltac:(lia)).
-  move=> [[pz [az bz]]] /= [/reaches_step /H /terminatingI {}H] [? ?].
-  subst pz. by apply /H /step_None /nth_error_None.
+  have [z' [Hz' ?]] := reaches'stepE Hxy Hy a b ltac:(lia) ltac:(lia).
+  apply /(terminatingI Hz') /step_None /nth_error_None. lia.
 Qed.
 
 Lemma terminating_orI p a b x y : 
@@ -553,13 +557,10 @@ Proof.
   move: ay' => [|ay'] H'x'; first last.
   { (* case: (1, 0) f->>t-> (S a, S b) uniform transition to (S a, S b) *)
     right. move=> a.
-    move: Hx' => /reaches'E [n] [m] /= [Hax'] [Hbx'].
-    move=> /(_ (S a) 0 ltac:(lia) ltac:(lia)) /reaches'_incl.
-    move: H'x' => /(step_parallel (state x', (S a + n, m))) /=.
-    move=> /(_ ltac:(lia)) [[pz' [az' bz']]] /= [Hz'] [? ?].
-    subst pz'. move=> Hx'. exists (az' - 1), (bz' - 1).
-    move: Hx' => /reaches_trans. apply. apply /reaches_step.
-    rewrite Hz'. congr Some. congr pair. congr pair; lia. }
+    have := reaches'stepE Hx' H'x' (S a) 0.
+    move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz ?].
+    exists (a + ay'), by'. apply /(reaches_trans Hz) /reaches_eq.
+    congr (_, (_, _)); lia. }
   (* case: (1, 0) f->>t-> (0, S b) *)
   have := reaches'I (0, (1, 1)).
   move=> [x] [Hx]. case H'x: (step x) => [y|]; first last.
@@ -568,27 +569,17 @@ Proof.
     apply => /=; by [assumption|lia]. }
   case /(eq_or_inf Nat.eq_dec); first last.
   { (* case: (1, 1) f->>t-> HALT; uniform termination *)
-    move=> Hy. move: (Hx) (H'x) (Hy) => /terminating_orI => H /H {}H /H {H} [?|HS]; first by (do 4 left).
+    move=> Hy. move: (Hx) (H'x) (Hy) => /terminating_orI => H /H {}H /H {H} [?|HS].
+    { by do 4 left. }
     do 4 left. move=> [|a].
     { move: HS => /(_ by') /terminatingE [z] [Hz /terminatingI]. apply.
-    move: Hx' => /reaches'_incl /reaches_trans. apply.
-    move: Hz => /(reaches_trans _). apply. by apply /reaches_step. }
-    move: Hx' => /reaches'E [n] [m] /= [?] [?].
-    move=> /(_ (S (S a)) 0 ltac:(lia) ltac:(lia)).
-    move: H'x' => /(step_parallel (state x', (S (S a) + n, m))) /=.
-    move=> /(_ ltac:(lia)) [[pz' [az' bz']]] /=.
-    move=> [Hz'] [?] ? Hx'.
-    move: Hx => /reaches'E [n'] [m'] /= [?] [?].
-    move=> /(_ az' bz' ltac:(lia) ltac:(lia)).
-    move: H'x => /(step_parallel (state x, (az' + n', bz' + m'))) /=.
-    move=> /(_ ltac:(lia)).
-    move=> [z] [Hz] [?] ? Hk. apply: (terminatingI _ z); first last.
-    { apply /step_None /nth_error_None. lia. }
-    subst pz'.
-    move: Hx' => /reaches'_incl /reaches_trans. apply.
-    move: Hz' => /reaches_step /reaches_trans. apply.
-    move: Hk => /reaches'_incl /reaches_trans. apply.
-    by apply: reaches_step. }
+      exact: (reaches_trans (reaches_trans (reaches'_incl Hx') (reaches_step H'x')) Hz). }
+    have := reaches'stepE Hx' H'x' (S (S a)) 0.
+    move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz [? ?]]. subst pz.
+    have := reaches'stepE Hx H'x az bz.
+    move=> /= /(_ ltac:(lia) ltac:(lia)) [z'] [Hz' ?].
+    apply: (terminatingI (reaches_trans Hz Hz')).
+    apply /step_None /nth_error_None. lia. }
   (* case (1, 1) f->>t-> (a, b) at index 0 *)
   move=> H0y. move Ha'y: (value1 y) => a'y. move Hb'y: (value2 y) => b'y.
   move: a'y b'y Ha'y Hb'y => [|a'y] [|b'y] H1y H2y.
@@ -597,19 +588,12 @@ Proof.
     by rewrite (config_eta y) H0y H1y H2y.
   - (* case: (1, 1) f->>t-> (0, S b') uniform transition to (0, Sb') *)
     do 1 left. right. move=> a.
-    move: Hx' => /reaches'E [n] [m] /= [?] [?].
-    move=> /(_ (S a) 0 ltac:(lia) ltac:(lia)).
-    move: H'x' => /(step_parallel (state x', (S a + n, m))) /=.
-    move=> /(_ ltac:(lia)) [y'] [Hy'] [H0y'] ?.
-    move=> /reaches'_incl Hk'.
-    move: Hx H'x => /dec_a_0 H. rewrite (config_eta y) H0y H1y H2y.
-    move=> /H {H} => /(_ a (S by')) Hk''.
-    exists (a * b'y + by').
-    have ->: S (a * b'y + by') = a * b'y + S by' by lia.
-    move: Hk' => /reaches_trans. apply.
-    move: Hy' => /reaches_step /reaches_trans. apply.
-    move: Hk'' => /(reaches_trans _). apply.
-    apply: reaches_eq. rewrite (config_eta y') -H0y'. congr pair. congr pair; lia.
+    have := reaches'stepE Hx' H'x' (S a) 0.
+    move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz [? ?]]. subst pz.
+    have ? : y = (0, (0, S b'y)) by (rewrite (config_eta y); congr (_, (_, _))).
+    subst y. have /(reaches_trans Hz) H := dec_a_0 Hx H'x az bz.
+    exists (az * b'y + bz - 1). apply /(reaches_trans H) /reaches_eq.
+    congr (_, (_, _)); lia.
   - (* case: (1, 1) f->>t-> (S a', 0) loop or uniform transition to (0, 0) *)
     move: Hx H'x. rewrite (config_eta y) H0y H1y H2y.
     move=> /dec_b_0 H /H {H}. move: a'y {H1y} => [|a'y] H.
@@ -619,16 +603,10 @@ Proof.
       { clear -HM. move=> H a. elim: (S a); first by exists 0.
         move=> {}a IH. have Hk' := H a. by apply: (reaches_trans (H a)). }
       move=> {}a.
-      move: Hx' => /reaches'E [n] [m] /= [?] [?].
-      move=> /(_ (S a) 0 ltac:(lia) ltac:(lia)) /reaches'_incl Hk'.
-      move: H'x' => /(step_parallel (state x', (S a + n, m))) /=.
-      move=> /(_ ltac:(lia)) [[pz [az bz]]] [Hz] /= [? ?].
-      have := H a (S by'). have ->: S by' * 0 + a = a by lia.
-      move=> Hk''. subst pz.
-      move: Hk' => /reaches_trans. apply.
-      move: Hz => /reaches_step /reaches_trans. apply.
-      move: Hk'' => /(reaches_trans _). apply.
-      apply: reaches_eq. congr pair. congr pair; lia.
+      have := reaches'stepE Hx' H'x' (S a) 0.
+      move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz [? ?]].
+      subst pz. apply /(reaches_trans (reaches_trans Hz (H az bz))) /reaches_eq.
+      congr (_, (_, _)); lia.
     + (* non-termination *)
       do 3 left. right. move=> a. apply: transition_loop => a' b' ??.
       move: Hx' H'x' => /reaches'E [n] [m] /= [?] [?].
@@ -854,91 +832,69 @@ Lemma uniform_transition v :
   {w | In w representatives /\ v <> w /\ 
     (forall ab, RZ v ab -> exists a'b', RZ w a'b' /\ reaches (0, ab) (0, a'b')) }.
 Proof.
-Admitted.
-(*
   rewrite /representatives /=.
   have HE := @eq_or_inf (nat * nat) ltac:(by do ? decide equality).
   case /HE; [|case /HE; [|case /HE; [|case /HE; last done]]] => <-.
-  - have [[[[|]|]|]|] := transition_0_0.
-    + move=> ?. left. left=> - [a' b'] /= ?.
+  - have [[[[|]|]|]|] := transition_0_0 => H.
+    + left. left=> - [a' b'] /= ?.
       have ->: a' = 0 by lia. have ->: b' = 0 by lia. done.
-    + move=> ?. left. right=> - [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = 0 by lia. done.
-    + move=> H. right. exists (1, 0). split; first by tauto.
-      move: H => [k] [a'' Hk].      
+    + left. right=> - [a' b'] /= ?.
+      have ->: a' = 0 by lia. have ->: b' = 0 by lia. done.
+    + right. exists (1, 0). split; [tauto|split;[done|]].
       move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = 0 by lia.
-      exists (k-1), (S a'', 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (0, 1). split; first by tauto.
-      move: H => [k] [b'' Hk].
+      have [a'' ?] := H. exists (S a'', 0). split; by [|lia].
+    + right. exists (0, 1). split; [tauto|split;[done|]].
       move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = 0 by lia.
-      exists (k-1), (0, S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (1, 1). split; first by tauto.
-      move: H => [k] [a'' [b'' Hk]].
+      have [b'' ?] := H. exists (0, S b''). split; by [|lia].
+    + right. exists (1, 1). split; [tauto|split;[done|]].
       move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = 0 by lia.
-      exists (k-1), (S a'', S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-  - have [[[[|]|]|]|] := transition_Sa_0.
-    + move=> ?. left. left=> - [a' b'] /= ?.
-      have ->: a' = S (a' - 1) by lia. have ->: b' = 0 by lia. done.
-    + move=> ?. left. right=> - [a' b'] /= ?.
-      have ->: a' = S (a' - 1) by lia. have ->: b' = 0 by lia. done.
-    + move=> H. right. exists (0, 0). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = 0 by lia.
-      have [k Hk] := H (a'-1). exists (k-1), (0, 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (0, 1). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = 0 by lia.
-      have [k [b'' Hk]] := H (a'-1).
-      exists (k-1), (0, S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (1, 1). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = 0 by lia.
-      have [k [a'' [b'' Hk]]] := H (a'-1).
-      exists (k-1), (S a'', S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-  - have [[[[|]|]|]|] := transition_0_Sb.
-    + move=> ?. left. left=> - [a' b'] /= ?.
-      have ->: a' = 0 by lia. have ->: b' = S (b' - 1) by lia. done.
-    + move=> ?. left. right=> - [a' b'] /= ?.
-      have ->: a' = 0 by lia. have ->: b' = S (b' - 1) by lia. done.
-    + move=> H. right. exists (0, 0). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b' - 1) by lia.
-      have [k Hk] := H (b'-1). exists (k-1), (0, 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (1, 0). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b' - 1) by lia.
-      have [k [a'' Hk]] := H (b'-1).
-      exists (k-1), (S a'', 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (1, 1). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b' - 1) by lia.
-      have [k [a'' [b'' Hk]]] := H (b'-1).
-      exists (k-1), (S a'', S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-  - have [[[[|]|]|]|] := transition_Sa_Sb.
-    + move=> ?. left. left=> - [a' b'] /= ?.
-      have ->: a' = S (a' - 1) by lia. have ->: b' = S (b' - 1) by lia. done.
-    + move=> ?. left. right=> - [a' b'] /= ?.
-      have ->: a' = S (a' - 1) by lia. have ->: b' = S (b' - 1) by lia. done.
-    + move=> H. right. exists (0, 0). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = S (b' - 1) by lia.
-      have [k Hk] := H (a'-1) (b'-1). exists (k-1), (0, 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (1, 0). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = S (b' - 1) by lia.
-      have [k [a'' Hk]] := H (a'-1) (b'-1).
-      exists (k-1), (S a'', 0). split; first by lia.
-      by move: Hk => /multi_step_act <-.
-    + move=> H. right. exists (0, 1). split; first by tauto.
-      move=> [a' b'] /= ?. have ->: a' = S (a' - 1) by lia. have ->: b' = S (b' - 1) by lia.
-      have [k [b'' Hk]] := H (a'-1) (b'-1).
-      exists (k-1), (0, S b''). split; first by lia.
-      by move: Hk => /multi_step_act <-.
+      have [a'' [b'' ?]] := H. exists (S a'', S b''). split; by [|lia].
+  - have [[[[|]|]|]|] := transition_Sa_0 => H.
+    + left. left=> - [a' b'] /= ?.
+      have ->: a' = S (a'-1) by lia. have ->: b' = 0 by lia. done.
+    + left. right=> - [a' b'] /= ?.
+      have ->: a' = S (a'-1) by lia. have ->: b' = 0 by lia. done.
+    + right. exists (0, 0). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = 0 by lia.
+      have ? := H (a'-1). exists (0, 0). split; by [|lia].
+    + right. exists (0, 1). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = 0 by lia.
+      have [b'' ?] := H (a'-1). exists (0, S b''). split; by [|lia].
+    + right. exists (1, 1). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = 0 by lia.
+      have [a'' [b'' ?]] := H (a'-1). exists (S a'', S b''). split; by [|lia].
+  - have [[[[|]|]|]|] := transition_0_Sb => H.
+    + left. left=> - [a' b'] /= ?.
+      have ->: a' = 0 by lia. have ->: b' = S (b'-1) by lia. done.
+    + left. right=> - [a' b'] /= ?.
+      have ->: a' = 0 by lia. have ->: b' = S (b'-1) by lia. done.
+    + right. exists (0, 0). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b'-1) by lia.
+      have ? := H (b'-1). exists (0, 0). split; by [|lia].
+    + right. exists (1, 0). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b'-1) by lia.
+      have [a'' ?] := H (b'-1). exists (S a'', 0). split; by [|lia].
+    + right. exists (1, 1). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = 0 by lia. have ->: b' = S (b'-1) by lia.
+      have [a'' [b'' ?]] := H (b'-1). exists (S a'', S b''). split; by [|lia].
+  - have [[[[|]|]|]|] := transition_Sa_Sb => H.
+    + left. left=> - [a' b'] /= ?.
+      have ->: a' = S (a'-1) by lia. have ->: b' = S (b'-1) by lia. done.
+    + left. right=> - [a' b'] /= ?.
+      have ->: a' = S (a'-1) by lia. have ->: b' = S (b'-1) by lia. done.
+    + right. exists (0, 0). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = S (b'-1) by lia.
+      have ? := H (a'-1) (b'-1). exists (0, 0). split; by [|lia].
+    + right. exists (1, 0). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = S (b'-1) by lia.
+      have [a'' ?] := H (a'-1) (b'-1). exists (S a'', 0). split; by [|lia].
+    + right. exists (0, 1). split; [tauto|split;[done|]].
+      move=> [a' b'] /= ?. have ->: a' = S (a'-1) by lia. have ->: b' = S (b'-1) by lia.
+      have [b'' ?] := H (a'-1) (b'-1). exists (0, S b''). split; by [|lia].
 Qed.
-*)
 
-Opaque CM2.multi_step.
+
+Arguments CM2.multi_step : simpl never.
 Arguments incl_cons_inv {_ _ _ _}.
 
 Lemma RZ_loop v : 

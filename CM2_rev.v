@@ -257,7 +257,7 @@ Proof.
     move: Hk => /multi_step_plus ->.
     have ->: n + b * n + a = b * n + (n + a) by lia.
     rewrite <- IH. apply: multi_step_plus.
-    move: H2x. simpl. rewrite /= /step. case: (nth_error M (state x)); last done.
+    move: H2x. rewrite /= /step. case: (nth_error M (state x)); last done.
     move=> [].
     + move=> c [] /= -> ??. congr Some. congr pair. congr pair; lia.
     + move=> [] q.
@@ -267,6 +267,41 @@ Proof.
       * move: (value1 x) Hax => [|ax]; first by lia.
         rewrite Hbx. move=> ? []. by lia.
 Qed.
+
+(* EXPERIMENT WITH step conditions
+Lemma asd2 x y : step x = Some y -> value2 y < value2 x ->
+  value1 x = value1 y /\ value2 x = S (value2 y) /\ 
+  forall a b, step (state x, (a, S b)) = Some (0, (a, b)).
+Admitted.
+
+(* if (1, 1) f->>t-> (1 + n, 0), then (a, b) t->> (b * n + a, 0) *)
+Lemma dec_b_0 k x n : multi_step' k (0, (1, 1)) = Some x -> 
+  step x = Some (0, (1 + n, 0)) ->
+  forall a b, exists k', multi_step k' (0, (a, b)) = Some (0, (b * n + a, 0)).
+Proof.
+  move=> H1x H2x a b. elim: b a.
+  - move=> a. by exists 0.
+  - move=> b IH a. move: H1x => /multi_step'E.
+    move=> [n'] [m'] /= [Hax] [Hbx] /(_ a (S b) ltac:(lia) ltac:(lia)).
+    move=> /multi_step'_incl Hk.
+    have [k' {}IH] := IH (n + a). exists (k + (1 + k')).
+    move: Hk => /multi_step_plus ->.
+    have ->: n + b * n + a = b * n + (n + a) by lia.
+    rewrite <- IH. apply: multi_step_plus.
+    move: H2x => /asd2 /= /(_ ltac:(lia)) [?] [?] ->.
+    congr Some. congr pair. congr pair; lia.
+(*
+    move: H2x. rewrite /= /step. case: (nth_error M (state x)); last done.
+    move=> [].
+    + move=> c [] /= -> ??. congr Some. congr pair. congr pair; lia.
+    + move=> [] q.
+      * move: (value2 x) Hbx => [|bx]; first by lia.
+        move=> ? [? ? ?] /=. subst. have ->: m' = 0 by lia.
+        congr Some. congr pair. congr pair; lia.
+      * move: (value1 x) Hax => [|ax]; first by lia.
+        rewrite Hbx. move=> ? []. by lia.*)
+Qed.
+*)
 
 (* if (1, 0) f->>t-> (0, 0), then (a, 0) t->> (0, 0) *)
 Lemma dec_a_0' k x : multi_step' k (0, (1, 0)) = Some x -> 
@@ -908,15 +943,13 @@ Proof.
       (forall ab, RZ v ab -> exists k a'b', RZ w a'b' /\ multi_step (S k) (0, ab) = Some (0, a'b')) } ) }.
   { exists representatives; first done. by apply: uniform_transition. }
   case. elim.
-  { move=> _ H v /H /= [[|]|]; [tauto|tauto|].
-    move=> {}H. exfalso. by case: H => ? []. }
+  { move=> _ H v /H /= [[|]|]; [tauto|tauto|]. by move=> [?] []. }
   move=> v0 L IH /incl_cons_inv [Hv0 HL] HRZ. apply: IH; first done.
   move=> v /HRZ. move=> [[|]|]; [tauto|tauto|].
   have HE := @eq_or_inf (nat * nat) ltac:(by do ? decide equality).
   move=> [w] /= [/HE [|]]; first last.
   { move=> ??. right. by exists w. }
-  move=> <-. move: Hv0 => /HRZ.
-  move=> [[|]|].
+  move=> <-. move: Hv0 => /HRZ [[|]|].
   - (* termination *)
     move=> Hv0 Hv. left. left=> ab /Hv [k] [a'b'] [/Hv0].
     move=> [k' Hk'] HSk. exists ((S k) + k').
@@ -956,12 +989,10 @@ Proof.
     by move: Hk => /multi_step'_incl /multi_step_plus ->. }
   case /(eq_or_inf Nat.eq_dec); first last.
   { (* termination *)
-    move=> /nth_error_None Hpz. left.
-    exists (k+(1+1)).
+    move=> /nth_error_None Hpz. left. exists (k+(1+1)).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
     move: Hz => /(multi_step_plus 1) ->.
-    have -> : multi_step 1 = step by done.
-    by rewrite /step Hpz. }
+    by apply /step_None. }
   move=> ?. subst pz.
   case: (uniform_decision_0 az bz).
   - (* termination *)
@@ -972,7 +1003,8 @@ Proof.
     move=> H'z. right=> k'.
     move=> /(multi_step_k_monotone (k+(1+k'))) /(_ ltac:(lia)).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) ->. apply: H'z.
+    move: Hz => /(multi_step_plus 1) ->.
+    by apply: H'z.
 Qed.
 
 End Reversible.
