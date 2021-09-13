@@ -275,6 +275,23 @@ Proof.
   exact: (reaches_trans Hxy Hyz').
 Qed.
 
+Lemma step_zero x a b : step x = Some (0, (a, b)) ->
+  (value1 x = 1 + a /\ value2 x = b) \/ (value1 x = a /\ value2 x = 1 + b).
+Proof.
+  rewrite /step. case: (nth_error M (state x)); last done.
+  case; first done.
+  move=> [] q.
+  - move: (value2 x) => [|?]; [done|case; lia].
+  - move: (value1 x) => [|?]; [done|case; lia].
+Qed.
+
+Lemma reaches'_value_monotone x y :
+  reaches' x y -> value1 x <= value1 y /\ value2 x <= value2 y.
+Proof.
+  move=> /reaches'E [n] [m] [?] [?].
+  move=> /(_ (value1 x) (value2 x) ltac:(lia) ltac:(lia)). lia.
+Qed.
+
 (* if (1, 1) f->>t-> (0, 1 + m), then (a, b) t->> (0, a * m + b) *)
 Lemma dec_a_0 {x m} : reaches' (0, (1, 1)) x -> 
   step x = Some (0, (0, 1 + m)) ->
@@ -321,30 +338,22 @@ Proof.
         rewrite Hbx. move=> ? []. by lia.
 Qed.
 
-(* if (1, 0) f->>t-> (0, 0), then (a, 0) t->> (0, 0) *)
-Lemma dec_a_0' x : reaches' (0, (1, 0)) x -> 
+Lemma reaches'_zero {a b x} : reaches' (0, (a, b)) x -> 
   step x = Some (0, (0, 0)) ->
-  forall a, reaches (0, (a, 0)) (0, (0, 0)).
+  forall a' b', (a' > 0 -> a > 0) -> (b' > 0 -> b > 0) ->
+    reaches (0, (a', b')) (0, (0, 0)).
 Proof.
-  move=> H1x H2x. elim; first by exists 0.
-  move=> a IH. apply: (reaches_trans _ IH).
-  have := reaches'stepE H1x H2x (S a) 0.
-  move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz'] ?.
-  apply /(reaches_trans Hz') /reaches_eq.
-  congr (_, (_, _)); lia.
-Qed.
-
-(* if (0, 1) f->>t-> (0, 0), then (0, b) t->> (0, 0) *)
-Lemma dec_b_0' x : reaches' (0, (0, 1)) x -> 
-  step x = Some (0, (0, 0)) ->
-  forall b, reaches (0, (0, b)) (0, (0, 0)).
-Proof.
-  move=> H1x H2x. elim; first by exists 0.
-  move=> b IH. apply: (reaches_trans _ IH).
-  have := reaches'stepE H1x H2x 0 (S b).
-  move=> /= /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz'] ?.
-  apply /(reaches_trans Hz') /reaches_eq.
-  congr (_, (_, _)); lia.
+  move=> H1x H2x a' b'. move Hc: (a'+b') => c. elim: c a' b' Hc.
+  { move=> [|a'] [|b']; [|lia..]. move=> ???. by exists 0. }
+  move=> c IH a' b' ???.
+  have [?|?] : (a + b = 0) \/ (a + b > 0) by lia.
+  { apply /reaches_eq. congr (_, (_, _)); lia. }
+  move: (H2x) => /step_zero ?.
+  have := reaches'stepE H1x H2x a' b'.
+  move: (H1x) => /reaches'_value_monotone /= ?.
+  move=> /(_ ltac:(lia) ltac:(lia)) [[pz [az bz]]] /= [Hz] [? ?].
+  subst pz. have {}IH := IH az bz ltac:(lia) ltac:(lia) ltac:(lia).
+  exact: (reaches_trans Hz IH).
 Qed.
 
 Lemma terminatingI {x y} : reaches x y -> step y = None -> terminating x.
@@ -353,7 +362,7 @@ Proof.
 Qed.
 
 (* if (1, 1) ->> (S a, S b), then (a', b') does not terminate *)
-Lemma dec_loop x n m : reaches' (0, (1, 1)) x -> 
+Lemma reaches'_loop x n m : reaches' (0, (1, 1)) x -> 
   step x = Some (0, (1 + n, 1 + m)) ->
   forall a b, non_terminating (0, (a, b)).
 Proof.
@@ -457,16 +466,6 @@ Proof.
   by lia.
 Qed.
 
-(* not (1, 1) f->>t-> (0, 0) *)
-Lemma not_transition_1_1_to_0_0 x : reaches' (0, (1, 1)) x -> step x <> Some (0, (0, 0)).
-Proof.
-  move=> /reaches'E [n] [m] /= [H1x] [H2x] _.
-  rewrite /step. case: (nth_error M (state x)); last done.
-  move=> [].
-  - move=> ? [] ?. lia.
-  - move=> [] ?; rewrite ?H1x ?H2x; case; lia.
-Qed.
-
 (* uniform transition from equivalence class (0, 0) *)
 Lemma transition_0_0 :
   (* terminating equivalence class (0, 0) *)
@@ -544,7 +543,7 @@ Proof.
   { (* case: (1, 0) f->>t-> (_, 0) *)
     move: ay' => [|ay'] H'x'.
     - (* case: (1, 0) f->>t-> (0, 0) uniform transition to (0, 0) *)
-      do 2 left. right. move=> a. apply: dec_a_0'; by eassumption.
+      do 2 left. right. move=> a. apply: (reaches'_zero Hx' H'x'); lia.
     - (* non-termination *)
       do 3 left. right. move=> a. apply: transition_loop => a' b' ??.
       move: Hx' H'x' => /reaches'E [n] [m] /= [?] [?].
@@ -584,8 +583,8 @@ Proof.
   move=> H0y. move Ha'y: (value1 y) => a'y. move Hb'y: (value2 y) => b'y.
   move: a'y b'y Ha'y Hb'y => [|a'y] [|b'y] H1y H2y.
   - (* case: (1, 1) f->>t-> (0, 0) impossible *)
-    move: Hx H'x => /not_transition_1_1_to_0_0.
-    by rewrite (config_eta y) H0y H1y H2y.
+    move: Hx H'x => /reaches'_value_monotone /= ?.
+    rewrite (config_eta y) H0y => /step_zero. lia.
   - (* case: (1, 1) f->>t-> (0, S b') uniform transition to (0, Sb') *)
     do 1 left. right. move=> a.
     have := reaches'stepE Hx' H'x' (S a) 0.
@@ -620,7 +619,7 @@ Proof.
       move=> /(multi_step_plus 1) -> ->.
       split; first done. lia.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
-    do 3 left. right. move=> a. apply: dec_loop; [eassumption|].
+    do 3 left. right. move=> a. apply: reaches'_loop; [eassumption|].
     by rewrite H'x (config_eta y) H0y H1y H2y.
 Qed.
 
@@ -754,7 +753,7 @@ Admitted.
       move=> /(multi_step_plus 1) -> ->.
       split; first done. lia.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
-    do 3 left. right. move=> b. apply: dec_loop; [eassumption|].
+    do 3 left. right. move=> b. apply: reaches'_loop; [eassumption|].
     by rewrite H'x (config_eta y) H0y H1y H2y.
 Qed.
 *)
@@ -783,7 +782,7 @@ Proof.
     do 4 left. move=> a b. apply: H => /=; lia. }
   move: y H'x => [py' [[|ay'] [|by']]] H'x /= Hy'; subst py'.
   - (* case: (1, 1) f->>t-> (0, 0) impossible *)
-    by move: Hk => /not_transition_1_1_to_0_0.
+    move: Hk H'x => /reaches'_value_monotone /= ? /step_zero. lia.
   - (* case: (1, 1) f->>t-> (0, S b) uniform transition to (0, S b) *)
     right. move=> a b.
     move: Hk H'x => /dec_a_0 H /H /(_ (S a) (S b)) Hk'.
@@ -796,7 +795,7 @@ Proof.
     move: Hk'. congr (reaches _ _). congr pair. congr pair; lia.
   - (* case: (1, 1) f->>t-> (S a, S b) non-termination *)
     do 3 left. right. move=> a b.
-    apply: dec_loop; by eassumption.
+    apply: reaches'_loop; by eassumption.
 Qed.
 
 (* equivalence class business *)
