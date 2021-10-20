@@ -1,92 +1,83 @@
-(**************************************************************)
-(*   Copyright Dominique Larchey-Wendling [*]                 *)
-(*                                                            *)
-(*                             [*] Affiliation LORIA -- CNRS  *)
-(**************************************************************)
-(*      This file is distributed under the terms of the       *)
-(*         CeCILL v2 FREE SOFTWARE LICENSE AGREEMENT          *)
-(**************************************************************)
+(* 
+  Autor(s):
+    Andrej Dudenhefner (1) 
+  Affiliation(s):
+    (1) TU Dortmund University, Dortmund, Germany
+*)
 
-(* Certified Undecidability of Intuitionistic Linear Logic via Binary Stack Machines and Minsky Machines. Yannick Forster and Dominique Larchey-Wendling. CPP '19. http://uds-psl.github.io/ill-undecidability/ *)
+(* 
+  Problem(s):
+    Two Counter Minsky Machine Halting (MM2_HALT)
+*)
 
-(** * Halting problem for two counter Minsky machines MM2_HALTING  *)
+Require Import List.
 
-Require Import List Arith Relations.
+(* a configuration consists of a state and two counter values *)
+Definition Config : Set := nat * (nat * nat).
 
-Set Implicit Arguments.
+(* accessors for state, value1, value2 of configurations *)
+Definition state (x: Config) : nat := fst x.
+Arguments state !x /.
+Definition value1 (x: Config) : nat := fst (snd x).
+Arguments value1 !x /.
+Definition value2 (x: Config) : nat := snd (snd x).
+Arguments value2 !x /.
 
-Section self_contained_mm2.
+(* the instruction zero true maps 
+      a configuration (p, (v1, v2)) to (1+p, (v1, 0))
+    the instruction zero false maps 
+      a configuration (p, (v1, v2)) (1+p, (0, v2))
+    the instruction inc true maps 
+      a configuration (p, (v1, v2)) to (1+p, (v1, 1+v2))
+    the instruction inc false maps 
+      a configuration (p, (v1, v2)) (1+p, (1+v1, v2))
+    an instruction dec true q maps
+      a configuration (p, (v1, 0)) to (1+p, (v1, 0)) 
+      a configuration (p, (v1, 1+v2)) to (q, (v1, v2)) 
+    an instruction dec false q maps
+      a configuration (p, (0, v2)) to (1+p, (0, v2)) 
+      a configuration (p, (1+v1, v2)) to (q, (v1, v2)) *)
+Inductive Instruction : Set := 
+  | zero : bool -> Instruction
+  | inc : bool -> Instruction
+  | dec : bool -> nat -> Instruction.
 
-  (* Two counters Minsky machines. Counters are named A and B
+(* a two counter machine is a list of instructions *)
+Definition Mm2 : Set := list Instruction.
 
-      For instructions: INC{A,B} | DEC{A,B} j 
+(* partial two counter Minsky machine step function *)
+Definition step (M: Mm2) (x: Config) : option Config :=
+  match nth_error M (state x) with
+  | None => None (* halting configuration *)
+  | Some (zero b) => (* set counter to zero, goto next state*)
+    Some (1 + (state x), ((if b then (value1 x) else 0), (if b then 0 else (value2 x))))
+  | Some (inc b) => (* increase counter, goto next state*)
+    Some (1 + (state x), ((if b then 0 else 1) + (value1 x), (if b then 1 else 0) + (value2 x)))
+  | Some (dec b y) => (* decrease counter, if successful goto state y *)
+    if b then 
+      match value2 x with
+      | 0 => Some (y, (value1 x, 0))
+      | S n => Some (1 + (state x), (value1 x, n))
+      end
+    else
+      match value1 x with
+      | 0 => Some (y, (0, value2 x))
+      | S n => Some (1 + (state x), (n, value2 x))
+      end
+  end.
 
-      j is a conditional jump PC index which occurs
-      when the counter has non-zero value 
-  *)
+Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
+  match oX with None => None | Some x => f x end.
 
-  Inductive mm2_instr : Set :=
-    | mm2_inc_a : mm2_instr
-    | mm2_inc_b : mm2_instr
-    | mm2_dec_a : nat -> mm2_instr
-    | mm2_dec_b : nat -> mm2_instr.
+Definition multi_step (M: Mm2) (n: nat) (x: Config) : option Config :=
+  Nat.iter n (option_bind (step M)) (Some x).
 
-  Reserved Notation "i '//' r '⇢' s" (at level 70, no associativity).
-  Reserved Notation "P '//' r '→' s" (at level 70, no associativity).
-  Reserved Notation "P '//' r '↠' s" (at level 70, no associativity).
-  Reserved Notation "P '//' r ↓" (at level 70, no associativity).
+(* does M eventually terminate starting from the configuration x? *)
+Definition terminating (M: Mm2) (x: Config) :=
+  exists n, multi_step M n x = None.
 
-  Notation mm2_state := (nat*(nat*nat))%type.
-
-  (* Instruction step semantics:
-
-      ρ // x ⇢ y : instruction ρ transforms state x into state y 
-
-      Notice that the jump occurs on the non-zero case when DEC
-
-   *)
-
-  Inductive mm2_atom : mm2_instr -> mm2_state -> mm2_state -> Prop :=
-    | in_mm2s_inc_a  : forall i   a b, mm2_inc_a   // (i,(  a,  b)) ⇢ (1+i,(S a,  b))
-    | in_mm2s_inc_b  : forall i   a b, mm2_inc_b   // (i,(  a,  b)) ⇢ (1+i,(  a,S b))
-    | in_mm2s_dec_aS : forall i j a b, mm2_dec_a j // (i,(S a,  b)) ⇢ (  j,(  a,  b))
-    | in_mm2s_dec_bS : forall i j a b, mm2_dec_b j // (i,(  a,S b)) ⇢ (  j,(  a,  b))
-    | in_mm2s_dec_a0 : forall i j   b, mm2_dec_a j // (i,(  0,  b)) ⇢ (1+i,(  0,  b))
-    | in_mm2s_dec_b0 : forall i j a,   mm2_dec_b j // (i,(  a,  0)) ⇢ (1+i,(  a,  0))
-  where "ρ // x ⇢ y" := (mm2_atom ρ x y).
-
-  (* instruction ρ occurs at PC index i in the program (1,P) *)
-
-  Definition mm2_instr_at (ρ : mm2_instr) i P := exists l r, P = l++ρ::r /\ 1+length l = i.
-
-  (* Program step semantics:
-
-      program P with first instruction at PC index 1 transforms 
-      state x into state y in one step, using instruction a PC index (fst x) *)
-
-  Definition mm2_step P x y := exists ρ, mm2_instr_at ρ (fst x) P /\ ρ // x ⇢ y.
-
-  Notation "P // x → y" := (mm2_step P x y).
- 
-  (* Halting condition: program P cannot progress anymore *)
-
-  Definition mm2_stop P s := forall s', ~ P // s → s'.
-
-  (* reflexive and transitive closure of program step semantics *)
-
-  Notation "P // x ↠ y" := (clos_refl_trans _ (mm2_step P) x y).
-
-  Definition mm2_terminates P s := exists s', P // s ↠ s' /\ mm2_stop P s'.
-
-  Notation "P // s ↓" := (mm2_terminates P s).
-
-  Definition MM2_PROBLEM := (list mm2_instr * nat * nat)%type.
-
-  Definition MM2_HALTING (P : MM2_PROBLEM) := 
-    match P with (P,a,b) => P // (1,(a,b)) ↓ end.
-
-  Definition MM2_HALTS_ON_ZERO (P : MM2_PROBLEM) := 
-    match P with (P,a,b) => P // (1,(a,b)) ↠ (0,(0,0)) end.
-
-End self_contained_mm2.
-
+(* Two-counter Minsky Machine Halting Problem
+   Given a two-counter Minsky machine M and a configucation c, 
+   does a run in M starting from c eventually terminate? *)
+Definition MM2_HALT : Mm2 * Config -> Prop :=
+  fun '(M, c) => terminating M c.
