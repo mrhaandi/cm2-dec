@@ -1,3 +1,5 @@
+
+
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
@@ -19,9 +21,6 @@ Qed.
 
 Lemma config_eta (x : Config) : x = (state x, (value1 x, value2 x)).
 Proof. by move: x => [? [? ?]]. Qed.
-
-Definition reversible (M : Cm2) : Prop := 
-  forall x y z, step M x = Some z -> step M y = Some z -> x = y.
 
 
 (* an avid instruction may jump to a valid state (except the first) *)
@@ -1026,4 +1025,12 @@ Proof.
   rewrite /decider. case: (uniform_decision M HM c).
   - tauto.
   - move=> H. split; [done | by move=> [k /H]].
+Qed.
+
+Theorem CM2_REV_HALT_dec :
+  exists f : { M: Cm2 | reversible M } * Config -> bool,
+  forall X, f X = true <-> CM2_REV_HALT X.
+Proof.
+  exists (fun '((exist _ M HM), c) => decider M HM c).
+  intros [[M HM] c]. exact (decider_spec M HM c).
 Qed.

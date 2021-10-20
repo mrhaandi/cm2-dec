@@ -2,12 +2,12 @@
   Autor(s):
     Andrej Dudenhefner (1) 
   Affiliation(s):
-    (1) Saarland University, Saarbrücken, Germany
+    (1) TU Dortmund University, Dortmund, Germany
 *)
 
 (* 
   Problem(s):
-    Two Counter Machine Halting (CM2_HALT)
+    Reversible Two Counter Machine Halting (CM2_REV_HALT)
 *)
 
 Require Import List.
@@ -65,9 +65,21 @@ Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option
 Definition multi_step (M: Cm2) (n: nat) (x: Config) : option Config :=
   Nat.iter n (option_bind (step M)) (Some x).
 
-(* Does M eventually terminate starting from the configuration x ? *)
+(* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Cm2) (x: Config) :=
   exists n, multi_step M n x = None.
+
+(* injectivity of the step function *)
+Definition reversible (M : Cm2) : Prop := 
+  forall x y z, step M x = Some z -> step M y = Some z -> x = y.
+
+(* Reversible Two-counter Machine Halting Problem
+   Given a reversible two-counter machine M and a configucation c, 
+   does a run in M starting from c eventually terminate? *)
+Definition CM2_REV_HALT : { M: Cm2 | reversible M } * Config -> Prop :=
+  fun '((exist _ M _), c) => terminating M c.
+
+(*
 
 (* Two Counter Machine Halting Problem
    Does a run starting from
@@ -75,8 +87,6 @@ Definition terminating (M: Cm2) (x: Config) :=
    eventually terminate? *)
 Definition CM2_HALT : Cm2 -> Prop :=
   fun M => terminating M (0, (0, 0)).
-
-(*
 
 (* halting configuration property *)
 Definition halting (M : Cm2) (x: Config) : Prop := step M x = None.
