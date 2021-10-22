@@ -37,7 +37,8 @@ Arguments value2 !x /.
     an instruction dec false q maps
       a configuration (p, (0, v2)) to (1+p, (0, v2)) 
       a configuration (p, (1+v1, v2)) to (q, (v1, v2)) *)
-Inductive Instruction : Set := 
+Inductive Instruction : Set :=
+  | halt : Instruction
   | zero : bool -> Instruction
   | inc : bool -> Instruction
   | dec : bool -> nat -> Instruction.
@@ -49,6 +50,7 @@ Definition Mm2 : Set := list Instruction.
 Definition step (M: Mm2) (x: Config) : option Config :=
   match nth_error M (state x) with
   | None => None (* halting configuration *)
+  | Some halt => None (* halting instruction *)
   | Some (zero b) => (* set counter to zero, goto next state*)
     Some (1 + (state x), ((if b then (value1 x) else 0), (if b then 0 else (value2 x))))
   | Some (inc b) => (* increase counter, goto next state*)
