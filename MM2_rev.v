@@ -5,6 +5,16 @@ Import ListNotations.
 Require Import ssreflect.
 Require Import CM2.MM2.
 
+(* induction principle wrt. a decreasing measure f *)
+(* example: elim /(measure_ind length) : l. *)
+Lemma measure_ind {X : Type} (f : X -> nat) (P : X -> Prop) : 
+  (forall x, (forall y, f y < f x -> P y) -> P x) -> forall (x : X), P x.
+Proof.
+  apply : well_founded_ind.
+  apply : Wf_nat.well_founded_lt_compat. move => *. by eassumption.
+Qed.
+Arguments measure_ind {X}.
+
 Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
 Proof.
   elim: m; first by rewrite Nat.add_0_r.
@@ -29,6 +39,31 @@ Lemma Forall_mapP {X Y : Type} {P : Y -> Prop} {f : X -> Y} {l : list X} :
 Proof.
   elim: l; [constructor; by constructor | ].
   move=> ? ? IH /=. constructor => /ForallE [? /IH ?]; by constructor.
+Qed.
+
+Lemma filter_length_le {X: Type} f g (L: list X) :
+  (forall x, f x = true -> g x = true) ->
+  length (filter f L) <= length (filter g L).
+Proof.
+  move=> Hfg. elim: L; first done.
+  move=> x L IH /=.
+  move: (f x) (Hfg x) => [].
+  - move=> -> /=; [done|lia].
+  - case: (g x) => /=; lia.
+Qed.
+
+Lemma filter_length_lt {X: Type} {f g} {L: list X} {x} :
+  (forall x, f x = true -> g x = true) ->
+  In x L -> f x = false -> g x = true ->
+  length (filter f L) < length (filter g L).
+Proof.
+  move=> Hfg + Hfx Hgx. elim: L; first done.
+  move=> y L IH /= [->|].
+  - rewrite Hfx Hgx /=.
+    move: Hfg => /filter_length_le => /(_ L). lia.
+  - move=> /IH {}IH. move: (f y) (Hfg y) => [].
+    + move=> -> /=; [done|lia].
+    + case: (g y) => /=; lia.
 Qed.
 
 Section DECIDRE.
@@ -377,7 +412,26 @@ Inductive R : list (nat*nat) -> list (nat*nat) -> Prop :=
 
 Lemma wf_R : well_founded R.
 Proof.
-Admitted. (* this is difficult *)
+  move=> L.
+  pose f := fun (L' : list (nat * nat)) => (length (filter (fun p => 
+    match in_dec Nat.eq_dec p (map fst L') with
+    | left _ => false
+    | right _ => true
+    end) (seq 0 l))).
+  elim /(measure_ind f): L.
+  move=> L IH. constructor => ? HL.
+  move: HL IH => [] {}L p c ? HL IH.
+  have [Hp|Hp] := in_dec Nat.eq_dec p (map fst L).
+  - admit. (*hard*)
+  - apply: IH. rewrite /f [map fst _]/=.
+    have: In p (seq 0 l) by apply /in_seq; lia.
+    move=> /filter_length_lt. apply.
+    + move=> q. case: (in_dec Nat.eq_dec q (p :: map fst L)); first done.
+      move=> Hq _. case: (in_dec Nat.eq_dec q (map fst L)); last done.
+      move: Hq => /=. tauto.
+    + rewrite /=. case: (Nat.eq_dec p p); [done|lia].
+    + by case: (in_dec _ _ _).
+Admitted.
 
 Lemma find_element (L : list (nat*nat)) p c :
   (Forall (fun '(p', c') => p = p' -> c < c') L) + (exists c', In (p, c') L /\ c' <= c).
