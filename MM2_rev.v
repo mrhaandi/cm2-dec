@@ -126,11 +126,6 @@ Proof.
       move=> [? [? ?]]. lia.
 Qed.
 
-
-Lemma multi_step_ubound {k p a b p' a' b'} : multi_step k (p, (a, b)) = Some (p', (a', b')) -> a' <= k + a /\ b' <= k + b.
-Proof.
-Admitted.
-
 (* parallel run *)
 Lemma parallel_b {k p a b p' a' b'} : multi_step k (p, (a, b)) = Some (p', (a', b')) -> k < b ->
   (exists k' p'' a'', k' <= k /\ multi_step k' (p, (a, b)) = Some (p'', (a'', 0))) \/
@@ -187,30 +182,272 @@ Definition reaches (x y: Config) := exists k, multi_step k x = Some y.
 Definition reaches_plus (x y: Config) := exists k, 0 < k /\ multi_step k x = Some y.
 Definition non_terminating x := forall k, multi_step k x <> None.
 
-(* terminate or reach uniformly next config or reach small config *)
-Corollary next_waypoint_b p b :
-  terminating (p, (0, b)) \/
-  (exists p' b', forall n, reaches_plus (p, (0, n+b)) (p', (0, n+b'))) \/
-  exists p' a' b', reaches (p, (0, b)) (p', (a', b')) /\ a' <= l + 1 /\ b' <= l + 1.
+Lemma reaches_plus_reaches {x y z} : reaches_plus x y -> reaches y z -> reaches_plus x z.
 Proof.
-  have [?|?] : b <= l + 1 \/ b > l + 1 by lia.
-  { do 2 right. exists p, 0, b. split; [by exists 0 | lia]. }
-  have [k [? Hk]] := next_waypoint p 0 b.
+  move=> [k [? Hk]] [k' Hk']. exists (k+k'). split; first by lia.
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+Lemma reaches_reaches_plus {x y z} : reaches x y -> reaches_plus y z -> reaches_plus x z.
+Proof.
+  move=> [k Hk] [k' [? Hk']]. exists (k+k'). split; first by lia.
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
+Proof. move=> [k [? Hk]]. by exists k. Qed.
+
+Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
+Proof.
+  move=> [k Hk] [k' Hk']. exists (k+k').
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+
+
+Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
+Proof.
+  move=> + ?. have ->: k' = (k' - k) + k by lia.
+  elim: (k' - k); first done.
+  by move=> ? IH /IH /= ->.
+Qed.
+
+Lemma multi_step_plus {k x k' y} :
+multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
+Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
+
+Lemma reaches_non_terminating {x y} : reaches x y -> non_terminating y -> non_terminating x.
+Proof.
+  move=> [k Hk] Hy k'.
+  have [|->] : k' <= k \/ k' = k + (k' - k) by lia.
+  - by move: Hk => + /multi_step_k_monotone H /H => ->.
+  - rewrite (multi_step_plus Hk). by apply: Hy.
+Qed.
+
+Lemma reaches_non_terminating' {x y} : reaches x y -> non_terminating x -> non_terminating y.
+Proof.
+  move=> [k' Hk'] Hx k Hk.
+  apply: (Hx (k' + k)).
+  by rewrite (multi_step_plus Hk').
+Qed.
+
+Lemma reaches_plus_state_bound {x y} : reaches_plus x y -> state x < l.
+Proof.
+  move=> [k [? Hk]].
+  suff: not (l <= state x) by lia.
+  move=> /nth_error_None Hx.
+  move: Hk. have ->: k = S (k - 1) by lia.
+  by rewrite /= option_bind_iter /step Hx iter_None.
+Qed.
+
+Lemma reaches_plus_trans {x y z} : reaches_plus x y -> reaches_plus y z -> reaches_plus x z.
+Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
+
+Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
+Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (multi_step_plus Hk). Qed.
+
+(*
+Lemma best_next_waypoint p a b :
+  terminating (p, (a, b)) \/
+  (exists p' a', forall n, reaches_plus (p, (n+a, b)) (p', (n+a', 0))) \/
+  (exists p' b', forall n, reaches_plus (p, (a, n+b)) (p', (0, n+b'))).
+Proof.
+  move Hn: (l - p) => n. elim: n p Hn a b.
+  { move=> p ? a b. left. exists 1. rewrite /= /step.
+    by have ->: nth_error M (state (p, (a, b))) = None
+      by (rewrite nth_error_None /=; lia). }
+  move=> n IH p ? a b.
+  case Hi: (nth_error M (state (p, (a, b)))) => [i|]; first last.
+  { left. exists 1. by rewrite /= /step Hi. }
+  move: i Hi => /= [].
+  - move=> Hi. left. exists 1. by rewrite /= /step Hi.
+  - case.
+    + move=> Hi. right. left. exists (S p), a.
+      move=> n'. exists 1. split; first done.
+      by rewrite /= /step /= Hi.
+    + admit.
+  - case.
+    + move=> Hi.
+      have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) a (S b).
+      * move=> /reaches_terminating HSp. left.
+        apply: HSp. exists 1. by rewrite /= /step Hi.
+      * right. left. exists p', a'.
+        move=> n'. apply: (reaches_plus_trans _ (HSp n')).
+        exists 1. split; first done.
+        by rewrite /= /step Hi.
+      * do 2 right. exists p', a'.
+        move=> n'. apply: (reaches_plus_trans _ (HSp n')).
+        exists 1. split; first done.
+        by rewrite /= /step Hi Nat.add_succ_r.
+    + admit.
+  - case=> q Hi.
+    + move: b => [|b].
+      { right. left. exists q, a => n'. exists 1. 
+        split; first done. by rewrite /= /step Hi. }
+      have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) a b.
+      * move=> /reaches_terminating HSp. left.
+        apply: HSp. exists 1. by rewrite /= /step Hi.
+      * right. left. exists p', a'.
+        move=> n'. apply: (reaches_plus_trans _ (HSp n')).
+        exists 1. split; first done.
+        by rewrite /= /step Hi.
+      * do 2 right. exists p', a'.
+        move=> n'. apply: (reaches_plus_trans _ (HSp n')).
+        exists 1. split; first done.
+        by rewrite /= /step Hi Nat.add_succ_r.
+    + admit.
+Admitted.
+*)
+
+Lemma best_next_waypoint p a b :
+  terminating (p, (a, b)) \/
+  (exists p' a', forall n, exists k, 0 < k < (l - p) + 1 /\ multi_step k (p, (n+a, b)) = Some (p', (n+a', 0))) \/
+  (exists p' b', forall n, exists k, 0 < k < (l - p) + 1 /\ multi_step k (p, (a, n+b)) = Some (p', (0, n+b'))).
+Proof.
+  move Hn: (l - p) => n. elim: n p Hn a b.
+  { move=> p ? a b. left. exists 1. rewrite /= /step.
+    by have ->: nth_error M (state (p, (a, b))) = None
+      by (rewrite nth_error_None /=; lia). }
+  move=> n IH p ? a b.
+  case Hi: (nth_error M (state (p, (a, b)))) => [i|]; first last.
+  { left. exists 1. by rewrite /= /step Hi. }
+  move: i Hi => /= [].
+  - move=> Hi. left. exists 1. by rewrite /= /step Hi.
+  - case.
+    + move=> Hi. right. left. exists (S p), a.
+      move=> n'. exists 1. split; first by lia.
+      by rewrite /= /step /= Hi.
+    + move=> Hi. do 2 right. exists (S p), b.
+      move=> n'. exists 1. split; first by lia.
+      by rewrite /= /step /= Hi.
+  - case.
+    + move=> Hi.
+      have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) a (S b).
+      * move=> /reaches_terminating HSp. left.
+        apply: HSp. exists 1. by rewrite /= /step Hi.
+      * right. left. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi.
+      * do 2 right. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+    + move=> Hi.
+      have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) (S a) b.
+      * move=> /reaches_terminating HSp. left.
+        apply: HSp. exists 1. by rewrite /= /step Hi.
+      * right. left. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+      * do 2 right. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi.
+  - case=> q Hi.
+    + move: b => [|b].
+      { right. left. exists q, a => n'. exists 1. 
+        split; first by lia. by rewrite /= /step Hi. }
+      have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) a b.
+      * move=> /reaches_terminating HSp. left.
+        apply: HSp. exists 1. by rewrite /= /step Hi.
+      * right. left. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi.
+      * do 2 right. exists p', a'.
+        move=> n'.
+        have [k [? <-]] := (HSp n').
+        exists (1+k). split; first by lia.
+        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+    + move: a => [|a].
+        { do 2 right. exists q, b => n'. exists 1. 
+          split; first by lia. by rewrite /= /step Hi. }
+        have [|[[p' [a' HSp]]|[p' [a' HSp]]]] := IH (S p) ltac:(lia) a b.
+        * move=> /reaches_terminating HSp. left.
+          apply: HSp. exists 1. by rewrite /= /step Hi.
+        * right. left. exists p', a'.
+          move=> n'.
+          have [k [? <-]] := (HSp n').
+          exists (1+k). split; first by lia.
+          apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+        * do 2 right. exists p', a'.
+          move=> n'.
+          have [k [? <-]] := (HSp n').
+          exists (1+k). split; first by lia.
+          apply: multi_step_plus. by rewrite /= /step Hi.
+Qed.
+
+(*
+Lemma best_next_waypoint p a b :
+  terminating (p, (a, b)) \/
+  (exists p' a', forall n, reaches_plus (p, (n+a, b)) (p', (n+a', 0))) \/
+  (exists p' b', forall n, reaches_plus (p, (a, n+b)) (p', (0, n+b'))) \/
+  exists p' a' b', reaches (p, (a, b)) (p', (a', b')) /\ a' <= l + 1 /\ b' <= l + 1.
+Proof.
+  have [?|?] : a <= l + 1 \/ a > l + 1 by lia.
+  { do 2 right. exists p, a, 0. split; [by exists 0 | lia]. }
+  have [k [? Hk]] := next_waypoint p a 0.
+Admitted.
+*)
+
+(* terminate or reach uniformly next config or reach small config *)
+Corollary next_waypoint_a p a :
+  terminating (p, (a, 0)) \/
+  (exists p' a', forall n, reaches_plus (p, (n+a, 0)) (p', (n+a', 0))) \/
+  exists p' a' b', reaches (p, (a, 0)) (p', (a', b')) /\ a' <= l /\ b' <= l.
+Proof.
+  have [?|[[p' [a' Hp]]|[p' [b' Hp]]]] := best_next_waypoint p a 0.
+  - by left.
+  - right. left. exists p', a' => n.
+    have [k [? Hk]] := Hp n. exists k.
+    split; [lia|done].
+  - do 2 right. exists p', 0, b'.
+    have [k [? Hk]] := Hp 0.
+    have ? := multi_step_bound Hk.
+    split; [by exists k|lia].
+Qed.
+
+(*
   move: Hk. case E: (multi_step k (p, (0, b))) => [[p' [a' b']]|]; first last.
   { move=> _. left. by exists k. }
   move=> [?|[?|?]]; right.
   - right. exists p', a', b'. split; [|lia]. by exists k.
   - move: E => /parallel_b => /(_ ltac:(lia)) [].
     + move=> [k' [p'' [a'' [?]]]] Hk'.
-      move: (Hk') => /multi_step_ubound ?. right.
+      move: (Hk') => /multi_step_bound ?. right.
       exists p'', a'', 0. split; last by lia.
       by exists k'.
     + move=> H. left. exists p', b' => n. exists k. split; first by lia.
       rewrite (H n). congr (Some (p', (_, n + b'))). lia.
   - right. exists p', a', 0.
-    move: (E) => /multi_step_ubound ?.
+    move: (E) => /multi_step_bound ?.
     split; last by lia.
     exists k. rewrite E. congr (Some (p', (a', _))). lia.
+Qed.
+*)
+
+(* terminate or reach uniformly next config or reach small config *)
+Corollary next_waypoint_b p b :
+  terminating (p, (0, b)) \/
+  (exists p' b', forall n, reaches_plus (p, (0, n+b)) (p', (0, n+b'))) \/
+  exists p' a' b', reaches (p, (0, b)) (p', (a', b')) /\ a' <= l /\ b' <= l.
+Proof.
+  have [?|[[p' [a' Hp]]|[p' [b' Hp]]]] := best_next_waypoint p 0 b.
+  - by left.
+  - do 2 right. exists p', a', 0.
+    have [k [? Hk]] := Hp 0.
+    have ? := multi_step_bound Hk.
+    split; [by exists k|lia].
+  - right. left. exists p', b' => n.
+    have [k [? Hk]] := Hp n. exists k.
+    split; [lia|done].
 Qed.
 
 (*
@@ -262,35 +499,8 @@ Proof.
       * move=> [<-] /=. right. apply /in_app_iff. left. apply /in_seq. lia.
 Qed.
 
-Lemma reaches_plus_reaches {x y z} : reaches_plus x y -> reaches y z -> reaches_plus x z.
-Proof.
-  move=> [k [? Hk]] [k' Hk']. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
-Qed.
 
-Lemma reaches_reaches_plus {x y z} : reaches x y -> reaches_plus y z -> reaches_plus x z.
-Proof.
-  move=> [k Hk] [k' [? Hk']]. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
-Qed.
-
-Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
-Proof. move=> [k [? Hk]]. by exists k. Qed.
-
-Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
-Proof.
-  move=> [k Hk] [k' Hk']. exists (k+k').
-  move: Hk. by rewrite /multi_step iter_plus => ->.
-Qed.
-
-Lemma reaches_non_terminating {x y} : reaches x y -> non_terminating y -> non_terminating x.
-Proof.
-  move=> [k Hk] Hy k' Hk'.
-Admitted.
-
-Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
-Proof. Admitted.
-
+(*
 (* if b remains strictly positive throughout a computation, 
   then a is bounded by max l (a + (l - p)) *)
 Lemma multi_step_ubound_a p a b k :
@@ -384,37 +594,43 @@ Proof.
         have := Hpab (S k'') ltac:(lia).
         by rewrite /= option_bind_iter /step Hi.
 Qed.
+*)
 
 Inductive R : list (nat*nat) -> list (nat*nat) -> Prop :=
-  R_lt L p b : p < l -> Forall (fun '(p', b') => p = p' -> b < b') L -> R ((p, b)::L) L.
+  R_lt L p c : p < l -> Forall (fun '(p', c') => p = p' -> c < c') L -> R ((p, c)::L) L.
 
 Lemma wf_R : well_founded R.
 Proof.
 Admitted. (* this is difficult *)
 
-Lemma find_element (L : list (nat*nat)) p b :
-  (Forall (fun '(p', b') => p = p' -> b < b') L) \/ (exists b', In (p, b') L /\ b' <= b).
+Lemma find_element (L : list (nat*nat)) p c :
+  (Forall (fun '(p', c') => p = p' -> c < c') L) \/ (exists c', In (p, c') L /\ c' <= c).
 Proof.
   elim: L; first by left.
-  move=> [p' b'] L [IH|[b'' [? ?]]].
-  - have [?|?] : (p = p' -> b < b') \/ (not (p = p' -> b < b')) by lia.
+  move=> [p' c'] L [IH|[c'' [? ?]]].
+  - have [?|?] : (p = p' -> c < c') \/ (not (p = p' -> c < c')) by lia.
     + left. by constructor.
-    + right. exists b'. split; [left; congr pair|]; lia.
-  - right. exists b''. split; [by right | lia].
+    + right. exists c'. split; [left; congr pair|]; lia.
+  - right. exists c''. split; [by right | lia].
 Qed.
 
-Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
+Lemma loop_a {p a a' b} :
+  a <= a' ->
+  (forall n : nat, reaches_plus (p, (n + a, b)) (p, (n + a', b))) ->
+  non_terminating (p, (a, b)).
 Proof.
-  move=> + ?. have ->: k' = (k' - k) + k by lia.
-  elim: (k' - k); first done.
-  by move=> ? IH /IH /= ->.
+  move=> ? Hp k.
+  suff: forall m, multi_step k (p, (m + a, b)) <> None by move=> /(_ 0).
+  elim: k; first done.
+  move=> k IH m.
+  have [k' [? Hk']] := Hp m.
+  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
+  move: Hk' => /multi_step_plus ->.
+  have ->: m + a' = (m + a' - a) + a by lia.
+  by apply: IH.
 Qed.
 
-Lemma multi_step_plus k x k' y :
-  multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
-Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
-
-Lemma loop_b p a b b' :
+Lemma loop_b {p a b b'} :
   b <= b' ->
   (forall n : nat, reaches_plus (p, (a, n + b)) (p, (a, n + b'))) ->
   non_terminating (p, (a, b)).
@@ -430,45 +646,74 @@ Proof.
   by apply: IH.
 Qed.
 
-Lemma big_wf_b p b p' b' (L : list (nat*nat)) :
-  0 < length L -> 
-  Forall (fun '(p'', b'') => forall n, reaches (p, (0, n+b)) (p'', (0, n+b''))) L ->
-  Forall (fun '(p'', b'') => forall n, reaches (p'', (0, n+b'')) (p', (0, n+b'))) L -> 
+Lemma reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
+Proof.
+  move=> [k [? Hk]]. elim; first done.
+  move=> k' Hk'.
+  move=> /(multi_step_k_monotone (k + k')) /(_ ltac:(lia)).
+  by rewrite (multi_step_plus Hk).
+Qed.
+
+Lemma big_wf_a p a (L : list (nat*nat)) :
+  Forall (fun '(p', a') => forall n, reaches_plus (p', (n+a', 0)) (p, (n+a, 0))) L -> 
+  terminating (p, (a, 0)) \/
+  non_terminating (p, (a, 0)) \/
+  (exists p' a' b', reaches (p, (a, 0)) (p', (a', b')) /\ a' <= l + 1 /\ b' <= l + 1).
+Proof.
+  elim /(well_founded_ind wf_R) : L p a.
+  move=> L IH p a HL.
+  have [Hp|[[p' [a' Hp]]|[p' [a' [b' [Hp ?]]]]]] := next_waypoint_a p a.
+  - by left.
+  - have /= ? := reaches_plus_state_bound (Hp 0).
+    have [H'L|] := find_element L p a.
+    + have /IH : R ((p, a)::L) L by constructor.
+      move=> /(_ p' a') /=. case; last case.
+      * constructor; first done.
+        apply: Forall_impl HL => - [p'' a''] Hp'' n.
+        by apply /(reaches_plus_trans (Hp'' n)) /Hp.
+      * move=> /reaches_terminating Hp'. left.
+        by apply /Hp' /reaches_plus_incl /(Hp 0).
+      * move=> /reaches_non_terminating Hp'. right. left.
+        by apply /Hp' /reaches_plus_incl /(Hp 0).
+      * move=> [p''] [a''] [b''] [Hp'] ?. do 2 right.
+        exists p'', a'', b''. split; last done.
+        by apply: (reaches_trans (reaches_plus_incl (Hp 0))).
+    + move=> [a''] [Ha'' ?]. right. left.
+      move: HL Ha'' => /Forall_forall HL /HL{HL} H'p.
+      apply: (reaches_non_terminating' (reaches_plus_incl (H'p 0))).
+      by apply: (loop_a _ H'p).
+  - do 2 right. exists p', a', b'. split; [done|lia].
+Qed.
+
+Lemma big_wf_b p b (L : list (nat*nat)) :
+  Forall (fun '(p', b') => forall n, reaches_plus (p', (0, n+b')) (p, (0, n+b))) L -> 
   terminating (p, (0, b)) \/
   non_terminating (p, (0, b)) \/
-  (exists p'' a'' b'', reaches (p, (0, b)) (p'', (a'', b'')) /\ a'' <= l + 1 /\ b'' <= l + 1).
+  (exists p' a' b', reaches (p, (0, b)) (p', (a', b')) /\ a' <= l + 1 /\ b' <= l + 1).
 Proof.
-  elim /(well_founded_ind wf_R) : L p' b'.
-  move=> L IH p' b' H0L H2L H3L.
-  have H : forall n, reaches (p, (0, n+b)) (p', (0, n+b')).
-  { move: H0L H2L H3L. clear. case: L => /=; first by lia.
-    move=> [p'' b''] ? _ /ForallE [H1 _] /ForallE [H2 _] n.
-    exact: (reaches_trans (H1 n) (H2 n)). }
-  have [H1|[[p'' [b'' H2]]|[p'' [a'' [b'' [H3 ?]]]]]] := next_waypoint_b p' b'.
-  - left. exact: (reaches_terminating (H 0) H1).
-  - have [|?] : l <= p'' \/ p'' < l by lia.
-    { move=> /nth_error_None Hp''. left.
-      apply: (reaches_terminating (H 0) _).
-      apply: (reaches_terminating (reaches_plus_incl (H2 0)) _).
-      exists 1. by rewrite /= /step /= Hp''. }
-    have [H4l|] := find_element L p'' b''.
-    + have /IH : R ((p'', b'')::L) L by constructor.
-      move=> /(_ p'' b'') /=. apply.
-      * lia.
-      * constructor; last done.
-        move=> n. exact: (reaches_trans (H n) (reaches_plus_incl (H2 n))).
-      * constructor.
-        { move=> n. by exists 0. }
-        apply: Forall_impl H3L => - [p''' b'''] H' n.
-        exact: (reaches_trans (H' n) (reaches_plus_incl (H2 n))).
-    + move=> [b'''] [Hb''' /loop_b Hloop].
-      right. left.
-      move: H2L (Hb''') => /Forall_forall H2L /H2L {}H2L.
-      apply /(reaches_non_terminating (H2L 0)) /Hloop.
-      move=> n. apply: (reaches_reaches_plus _ (H2 n)).
-      move: H3L Hb''' => /Forall_forall H3L /H3L. apply.
-  - do 2 right. exists p'', a'', b''. split; last done.
-    exact: (reaches_trans (H 0) H3).
+  elim /(well_founded_ind wf_R) : L p b.
+  move=> L IH p b HL.
+  have [Hp|[[p' [b' Hp]]|[p' [a' [b' [Hp ?]]]]]] := next_waypoint_b p b.
+  - by left.
+  - have /= ? := reaches_plus_state_bound (Hp 0).
+    have [H'L|] := find_element L p b.
+    + have /IH : R ((p, b)::L) L by constructor.
+      move=> /(_ p' b') /=. case; last case.
+      * constructor; first done.
+        apply: Forall_impl HL => - [p'' b''] Hp'' n.
+        by apply /(reaches_plus_trans (Hp'' n)) /Hp.
+      * move=> /reaches_terminating Hp'. left.
+        by apply /Hp' /reaches_plus_incl /(Hp 0).
+      * move=> /reaches_non_terminating Hp'. right. left.
+        by apply /Hp' /reaches_plus_incl /(Hp 0).
+      * move=> [p''] [a''] [b''] [Hp'] ?. do 2 right.
+        exists p'', a'', b''. split; last done.
+        by apply: (reaches_trans (reaches_plus_incl (Hp 0))).
+    + move=> [b''] [Hb'' ?]. right. left.
+      move: HL Hb'' => /Forall_forall HL /HL{HL} H'p.
+      apply: (reaches_non_terminating' (reaches_plus_incl (H'p 0))).
+      by apply: (loop_b _ H'p).
+  - do 2 right. exists p', a', b'. split; [done|lia].
 Qed.
 
 (* from any config can decide or get to next small waypoint *)
@@ -485,50 +730,37 @@ Proof.
     split; last by lia.
     exists k. split; [lia|done].
   - move=> [? ?]. subst a'.
-    have [Hp|] := next_waypoint_b p' b'.
-    { left. apply: (reaches_terminating _ Hp).
-      by exists k. }
-    move=> [[p'' [b'' Hp']]|[p'' [a'' [b'' [Hp' ?]]]]].
-    + (* use big_wf_b *)
-      have := big_wf_b p' b' p'' b'' [(p', b')]. case; last case.
-      * by move=> /=.
-      * constructor; last done.
-        move=> n. by exists 0.
-      * constructor; last done.
-        move=> n. by apply /reaches_plus_incl /Hp'.
-      * move=> /reaches_terminating H. left.
-        apply: H. by exists k.
-      * move=> /reaches_non_terminating H. right. left.
-        apply: H. by exists k.
-      * move=> [p'''] [a'''] [b'''] [H'p' ?].
-        do 2 right. exists p''', a''', b'''.
-        split; last by lia.
-        apply /(reaches_plus_reaches _ H'p').
-        exists k. split; [lia|done].
-    + do 2 right. exists p'', a'', b''.
-      split; last by lia.
+    have [|[|]] := big_wf_b p' b' [] ltac:(done).
+    * move=> /reaches_terminating Hp'. left.
+      apply: Hp'. by exists k.
+    * move=> /reaches_non_terminating Hp'. right. left.
+      apply: Hp'. by exists k.
+    * move=> [p''] [a''] [b''] [Hp'] ?. do 2 right.
+      exists p'', a'', b''. split; last done.
       apply: (reaches_plus_reaches _ Hp').
       exists k. split; [lia|done].
-  - admit. (* analogous *)
-Admitted.
-
-Lemma loop x : reaches_plus x x -> non_terminating x.
-Proof.
-Admitted.
-
-Lemma reaches_plus_state_bound x y : reaches_plus x y -> state x < l.
-Proof. Admitted.
+  - move=> [? ?]. subst b'.
+    have [|[|]] := big_wf_a p' a' [] ltac:(done).
+    * move=> /reaches_terminating Hp'. left.
+      apply: Hp'. by exists k.
+    * move=> /reaches_non_terminating Hp'. right. left.
+      apply: Hp'. by exists k.
+    * move=> [p''] [a''] [b''] [Hp'] ?. do 2 right.
+      exists p'', a'', b''. split; last done.
+      apply: (reaches_plus_reaches _ Hp').
+      exists k. split; [lia|done].
+Qed.
 
 Lemma small_decider p a b L : a <= l + 1 -> b <= l + 1 ->
-  Forall (fun '(p', (a', b')) => reaches_plus (p', (a', b')) (p, (a, b)) /\ p' <= l /\ a' <= l + 1 /\ b' <= l + 1 ) L ->
+  Forall (fun '(p', (a', b')) => reaches_plus (p', (a', b')) (p, (a, b)) /\ p' < l /\ a' <= l + 1 /\ b' <= l + 1 ) L ->
   NoDup L ->
   terminating (p, (a, b)) \/ non_terminating (p, (a, b)).
 Proof.
-  move Hn: (((S l)*(S (l+1))*(S (l+1)) + 1) - length L) => n.
+  move Hn: ((l*(l+2)*(l+2)+1) - length L) => n.
   elim: n L Hn p a b.
   { move=> L ? ????? H1L /NoDup_incl_length H2L.
-    have : incl L (list_prod (seq 0 (S l)) (list_prod (seq 0 (S (l+1))) (seq 0 (S (l+1))))).
-    { move=> [p [a b]]. Search list_prod.
+    have : incl L (list_prod (seq 0 l) (list_prod (seq 0 (l+2)) (seq 0 (l+2)))).
+    { move=> [p [a b]].
       move: H1L => /Forall_forall H1L /H1L ?.
       apply /in_prod; [|apply /in_prod]; apply /in_seq; lia. }
     move=> /H2L. rewrite ?prod_length ?seq_length. lia. }
@@ -536,7 +768,7 @@ Proof.
   have [|[|[p' [a' [b' [Hp ?]]]]]] := next_small_waypoint p a b; [tauto|tauto|].
   have := In_dec _ (p, (a, b)) L. case.
   { do ? decide equality. }
-  - move=> H'p. right. apply: loop.
+  - move=> H'p. right. apply: reaches_plus_self_loop.
     by move: H1L H'p => /Forall_forall H /H [].
   - move=> H'p. 
     have := (IH ((p, (a, b)) :: L) _ p' a' b'). case.
@@ -567,58 +799,3 @@ Proof.
 Qed.
 
 Print Assumptions decider.
-
-(*
-Lemma big p b p' b' (L : list (nat*nat)) :
-  0 < length L -> 
-  NoDup (map fst L) ->
-  Forall (fun '(p'', b'') => forall n, reaches (p, (0, n+b)) (p'', (0, n+b''))) L ->
-  Forall (fun '(p'', b'') => forall n, reaches (p'', (0, n+b'')) (p', (0, n+b'))) L -> 
-  terminating (p, (0, b)) \/
-  non_terminating (p, (0, b)) \/
-  (exists p'' a'' b'', reaches (p, (0, b)) (p'', (a'', b'')) /\ a'' <= l + 1 /\ b'' <= l + 1).
-Proof.
-  move Hn: ((l+l+3) - length L) => n.
-  elim: n L Hn p' b'.
-  { move=> L ? p' b' _ H1L. move: (H1L) => /NoDup_incl_length H H2L.
-    pose L' := map (fun '(p'', b'') => (p'', (0, b''))) L.
-    suff : length L' <= l+l+2 by (rewrite /L' map_length; lia).
-    apply /(distinct_states (p, (0, b))).
-    - rewrite /L' Forall_mapP. apply: Forall_impl H2L.
-      by move=> [p'' b''] /(_ 0).
-    - rewrite /L' map_map. move: H1L. congr NoDup.
-      by apply /map_ext => - [? ?]. }
-  move=> k IH L ? p' b' H0L H1L H2L H3L.
-  have H : forall n, reaches (p, (0, n+b)) (p', (0, n+b')).
-  { move: H0L H2L H3L. clear. case: L => /=; first by lia.
-    move=> [p'' b''] ? _ /ForallE [H1 _] /ForallE [H2 _] n.
-    exact: (reaches_trans (H1 n) (H2 n)). }
-  have [H1|[[p'' [b'' H2]]|[p'' [a'' [b'' [H3 ?]]]]]] := next_waypoint_b p' b'.
-  - left. exact: (reaches_terminating (H 0) H1).
-  - have [|Hp''] := In_dec Nat.eq_dec p'' (map fst L).
-    + (* state visited *)
-      move=> /in_map_iff [[p''' b'''] /= [?]] H4L. subst p'''.
-      move: H2L (H4L) => /Forall_forall H' /H'{H'} H2L.
-      move: H3L (H4L) => /Forall_forall H' /H'{H'} H3L.
-      have [?|?] : b''' <= b'' \/ b'' < b''' by lia.
-      * right. left. apply: (reaches_non_terminating (H 0)).
-        apply: (reaches_non_terminating (reaches_plus_incl (H2 0))).
-        have H' : forall n, reaches_plus (p'', (0, n + b''')) (p'', (0, n + b'')).
-        { move=> n. exact: (reaches_reaches_plus (H3L n) (H2 n)). }
-        move=> k'. admit. (* doable via loop *)
-      * do 2 right. exists p'', 0. admit. (* HOW TO GO DOWN? *)
-    + (* state not visited *)
-      have := IH ((p'', b'') :: L).
-      move=> /= /(_ ltac:(lia) p'' b''). apply.
-      * lia.
-      * by constructor.
-      * constructor; last done.
-        move=> n. exact: (reaches_trans (H n) (reaches_plus_incl (H2 n))).
-      * constructor.
-        { move=> n. by exists 0. }
-        apply: Forall_impl H3L => - [p''' b'''] H' n.
-        exact: (reaches_trans (H' n) (reaches_plus_incl (H2 n))).
-  - do 2 right. exists p'', a'', b''. split; last done.
-    exact: (reaches_trans (H 0) H3).
-Admitted.
-*)
