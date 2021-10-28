@@ -41,31 +41,6 @@ Proof.
   move=> ? ? IH /=. constructor => /ForallE [? /IH ?]; by constructor.
 Qed.
 
-Lemma filter_length_le {X: Type} f g (L: list X) :
-  (forall x, f x = true -> g x = true) ->
-  length (filter f L) <= length (filter g L).
-Proof.
-  move=> Hfg. elim: L; first done.
-  move=> x L IH /=.
-  move: (f x) (Hfg x) => [].
-  - move=> -> /=; [done|lia].
-  - case: (g x) => /=; lia.
-Qed.
-
-Lemma filter_length_lt {X: Type} {f g} {L: list X} {x} :
-  (forall x, f x = true -> g x = true) ->
-  In x L -> f x = false -> g x = true ->
-  length (filter f L) < length (filter g L).
-Proof.
-  move=> Hfg + Hfx Hgx. elim: L; first done.
-  move=> y L IH /= [->|].
-  - rewrite Hfx Hgx /=.
-    move: Hfg => /filter_length_le => /(_ L). lia.
-  - move=> /IH {}IH. move: (f y) (Hfg y) => [].
-    + move=> -> /=; [done|lia].
-    + case: (g y) => /=; lia.
-Qed.
-
 Lemma list_sum_map_le {X: Type} f g (L: list X) :
   (forall x, f x <= g x) ->
   list_sum (map f L) <= list_sum (map g L).
@@ -302,35 +277,6 @@ Proof.
 Qed.
 
 (*
-Lemma distinct_states x L :
-  Forall (fun y => reaches x y) L -> NoDup (map state L) -> length L <= l+l+2.
-Proof.
-  move=> /Forall_forall HL.
-  suff : incl (map state L) ([state x] ++ (seq 0 (l+1)) ++ (map (fun i => if i is dec _  q then q else 0) M)).
-  { move=> /NoDup_incl_length H /H. rewrite ?app_length ?map_length seq_length /=. lia. }
-  move=> p' /in_map_iff [y [<-]] /HL [[|k]].
-  { move=> /= [->]. by left. }
-  move=> /=. case: (multi_step k x); last done.
-  move=> [p [a b]]. rewrite /= /step.
-  case Hi: (nth_error M (state (p, (a, b)))) => [i|]; last done.
-  have ? : p < l by (apply /nth_error_Some; move: Hi => /= ->).
-  case: i Hi.
-  - done.
-  - move=> ? _ [<-] /=. right. apply /in_app_iff. left. apply /in_seq. lia.
-  - move=> ? _ [<-] /=. right. apply /in_app_iff. left. apply /in_seq. lia.
-  - move=> [] q /= Hi.
-    + move: b => [|b].
-      * move=> [<-] /=. right. apply /in_app_iff. right. apply /in_map_iff.
-        exists (dec true q). split; first done. apply /nth_error_In. eassumption.
-      * move=> [<-] /=. right. apply /in_app_iff. left. apply /in_seq. lia.
-    + move: a => [|a].
-      * move=> [<-] /=. right. apply /in_app_iff. right. apply /in_map_iff.
-        exists (dec false q). split; first done. apply /nth_error_In. eassumption.
-      * move=> [<-] /=. right. apply /in_app_iff. left. apply /in_seq. lia.
-Qed.
-*)
-
-(*
 (* if b remains strictly positive throughout a computation, 
   then a is bounded by max l (a + (l - p)) *)
 Lemma multi_step_ubound_a p a b k :
@@ -426,66 +372,6 @@ Proof.
 Qed.
 *)
 
-Inductive R : list (nat*nat) -> list (nat*nat) -> Prop :=
-  R_lt L p c : p < l -> Forall (fun '(p', c') => p = p' -> c < c') L -> R ((p, c)::L) L.
-
-Lemma wf_R : well_founded R.
-Proof.
-  move=> L.
-  pose f := fun (L' : list (nat * nat)) => (length (filter (fun p => 
-    match in_dec Nat.eq_dec p (map fst L') with
-    | left _ => false
-    | right _ => true
-    end) (seq 0 l))).
-  elim /(measure_ind f): L.
-  move=> L IH. constructor => ? HL.
-  move: HL IH => [] {}L p c ? HL IH.
-  have [Hp|Hp] := in_dec Nat.eq_dec p (map fst L).
-  - have -> : L = [(p, c+1)] by admit.
-    move: (c+1) => c'.
-    clear.
-    elim: c' c. admit. (* acc p 0 *)
-    move=> c' IH c.
-
-
-    have: c < c' by admit.
-    clear.
-    elim: c' c.
-    { lia. }
-    move=> c' IH c ?.
-    have [->|]: c = c' \/ c < c' by lia.
-    + admit.
-    + move=> /IH.
-Admitted.
-(*
-    apply: IH.
-    clear. elim: c.
-  
-  admit. (*hard*)
-  - apply: IH. rewrite /f [map fst _]/=.
-    have: In p (seq 0 l) by apply /in_seq; lia.
-    move=> /filter_length_lt. apply.
-    + move=> q. case: (in_dec Nat.eq_dec q (p :: map fst L)); first done.
-      move=> Hq _. case: (in_dec Nat.eq_dec q (map fst L)); last done.
-      move: Hq => /=. tauto.
-    + rewrite /=. case: (Nat.eq_dec p p); [done|lia].
-    + by case: (in_dec _ _ _).
-Admitted.
-*)
-
-Lemma find_element (L : list (nat*nat)) p c :
-  (Forall (fun '(p', c') => p = p' -> c < c') L) + (exists c', In (p, c') L /\ c' <= c).
-Proof.
-  elim: L; first by left.
-  move=> [p' c'] L [IH|IH].
-  - have [<-|?] := Nat.eq_dec p p'.
-    + have [?|?] := Nat.eq_dec (c'-c) 0.
-      * right. exists c'. split; [by left|lia].
-      * left. constructor; [lia|done].
-    + left. constructor; [lia|done].
-  - right. move: IH => [c'' [? ?]]. exists c''.
-    split; [by right|lia].
-Qed.
 
 Lemma loop_a {p a a' b} :
   a <= a' ->
@@ -527,72 +413,17 @@ Proof.
   by rewrite (multi_step_plus Hk).
 Qed.
 
-(*
-Lemma big_wf_a p a (L : list (nat*nat)) :
-  Forall (fun '(p', a') => forall n, reaches_plus (p', (n+a', 0)) (p, (n+a, 0))) L -> 
-  terminating (p, (a, 0)) +
-  non_terminating (p, (a, 0)) +
-  { '(p', (a', b')) | reaches (p, (a, 0)) (p', (a', b')) /\ a' <= l /\ b' <= l }.
-Proof.
-  elim /(well_founded_induction_type wf_R) : L p a.
-  move=> L IH p a HL.
-  have [[Hp|[[p' a'] Hp]]|[[p' [a' b']] [Hp ?]]] := next_waypoint_a p a.
-  - left. by left.
-  - have /= ? := reaches_plus_state_bound (Hp 0).
-    have [H'L|H'L] := find_element L p a.
-    + have /IH : R ((p, a)::L) L by constructor.
-      move=> /(_ p' a') /=. case; [|case|].
-      * constructor; first done.
-        apply: Forall_impl HL => - [p'' a''] Hp'' n.
-        by apply /(reaches_plus_trans (Hp'' n)) /Hp.
-      * move=> /reaches_terminating Hp'. left. left.
-        by apply /Hp' /reaches_plus_incl /(Hp 0).
-      * move=> /reaches_non_terminating Hp'. left. right.
-        by apply /Hp' /reaches_plus_incl /(Hp 0).
-      * move=> [[p'' [a'' b'']]] [Hp'] ?. right.
-        exists (p'', (a'', b'')). split; last done.
-        by apply: (reaches_trans (reaches_plus_incl (Hp 0))).
-    + left. right. move: H'L => [a''] [Ha'' ?].
-      move: HL Ha'' => /Forall_forall HL /HL{HL} H'p.
-      apply: (reaches_non_terminating' (reaches_plus_incl (H'p 0))).
-      by apply: (loop_a _ H'p).
-  - right. by exists (p', (a', b')).
-Qed.
-*)
-
 Definition update {X : Type} (f : nat -> X) n x :=
   fun m => if Nat.eq_dec m n is left _ then x else f m.
 
-  (* wrong needs every else equal
-Inductive R2 : (nat -> option nat) -> (nat -> option nat) -> Prop :=
-  | R2_None f g p c : p < l -> f p = None -> g p = Some c -> R2 g f
-  | R2_Some f g p c c' : p < l -> f p = Some c' -> g p = Some c -> c < c' -> R2 g f.
-*)
+Inductive R : (nat -> option nat) -> (nat -> option nat) -> Prop :=
+  | R_None f p c : p < l -> f p = None -> R (update f p (Some c)) f
+  | R_Some c' f p c : p < l -> f p = Some c' -> c < c' -> R (update f p (Some c)) f.
 
-Inductive R2 : (nat -> option nat) -> (nat -> option nat) -> Prop :=
-  | R2_None f p c : p < l -> f p = None -> R2 (update f p (Some c)) f
-  | R2_Some c' f p c : p < l -> f p = Some c' -> c < c' -> R2 (update f p (Some c)) f.
-
-
-(*
-Lemma asd1 f p c c' :
-  c <= c' -> Acc R2 (update f p (Some c)) -> Acc R2 (update f p (Some c')).
-Proof.
-  move Hg: (update f p (Some c)) => g ? H'g.
-  case: H'g Hg => H'g Hg. subst g. constructor.
-  move=> g Hg. apply: H'g.
-  move Hh: (update f p (Some c')) Hg => h H'h.
-  case: H'h Hh.
-  - move=> {}h p'' c'' ? ? ?. subst h.
-
-  move: Hg.
-  move: Hg.
-*)
-
-Lemma wf_R2 : well_founded R2.
+Lemma wf_R : well_founded R.
 Proof.
   pose F := (fun (f : nat -> option nat) => 
-    length (filter (fun p => if f p is None then true else false) (seq 0 l))).
+    list_sum (map (fun p => if f p is None then 1 else 0) (seq 0 l))).
   pose G := (fun (f : nat -> option nat) => 
     list_sum (map (fun p => if f p is Some c then c else 0) (seq 0 l))).
   elim /(measure_ind F). elim /(measure_ind G).
@@ -600,19 +431,20 @@ Proof.
   case: Hgf IHG IHF.
   - move=> {}f p c ? Hf IHG IHF.
     apply: IHF. rewrite /F.
-    have /filter_length_lt : In p (seq 0 l) by (apply /in_seq; lia).
+    have /list_sum_map_lt : In p (seq 0 l) by (apply /in_seq; lia).
     apply.
-    + move=> p''. case Hp'': (f p'') => [c''|]; last done.
-      rewrite /update Hp''. by case: (Nat.eq_dec p'' p).
-    + rewrite /update. by case: (Nat.eq_dec p p).
-    + by rewrite Hf.
+    + move=> p''. case Hp'': (f p'') => [c''|].
+      * rewrite /update Hp''. by case: (Nat.eq_dec p'' p).
+      * rewrite /update Hp''. case: (Nat.eq_dec p'' p); lia.
+    + rewrite /update Hf. case: (Nat.eq_dec p p); lia.
   - move=> c' {}f p c Hl Hf ? IHG IHF.
     apply: IHG; first last.
     { move=> h Hh. apply: IHF.
       suff: F (update f p (Some c)) <= F f by lia.
-      apply: filter_length_le.
-      move=> p''. case Hp'': (f p'') => [c''|]; last done.
-      rewrite /update Hp''. by case: (Nat.eq_dec p'' p). }
+      apply: list_sum_map_le.
+      move=> p''. case Hp'': (f p'') => [c''|].
+      - rewrite /update Hp''. by case: (Nat.eq_dec p'' p).
+      - rewrite /update Hp''. case: (Nat.eq_dec p'' p); lia. }
     rewrite /G.
     have : In p (seq 0 l) by (apply /in_seq; lia).
     move=> /list_sum_map_lt. apply.
@@ -632,18 +464,18 @@ Lemma big_wf_a p a (f : nat -> option nat) :
   non_terminating (p, (a, 0)) +
   { '(p', (a', b')) | reaches (p, (a, 0)) (p', (a', b')) /\ a' <= l /\ b' <= l }.
 Proof.
-  elim /(well_founded_induction_type wf_R2) : f p a.
-  move=> f IH p a HL.
+  elim /(well_founded_induction_type wf_R) : f p a.
+  move=> f IH p a Hf.
   have [[Hp|[[p' a'] Hp]]|[[p' [a' b']] [Hp ?]]] := next_waypoint_a p a.
   - left. by left.
   - have /= ? := reaches_plus_state_bound (Hp 0).
     set P := (_ + _ + _)%type.
-    have HR2 : R2 (update f p (Some a)) f -> P.
+    have HR : R (update f p (Some a)) f -> P.
     { move=> /IH /(_ p' a') /=. case; [|case|].
       - move=> p''' a'''. rewrite /update.
         case: (Nat.eq_dec p''' p).
         { by move=> -> [<-]. }
-        move=> ? /HL Hp''' n.
+        move=> ? /Hf Hp''' n.
         by apply: (reaches_plus_trans (Hp''' n) (Hp n)).
       - move=> /reaches_terminating Hp'. left. left.
         by apply /Hp' /reaches_plus_incl /(Hp 0).
@@ -654,11 +486,11 @@ Proof.
         by apply: (reaches_trans (reaches_plus_incl (Hp 0))). }
     case H'p: (f p) => [a''|].
     + case E: (a''-a) => [|?].
-      { left. right. move: H'p => /HL{HL} H'p.
+      { left. right. move: H'p => /Hf{Hf} H'p.
         apply: (reaches_non_terminating' (reaches_plus_incl (H'p 0))).
         apply: (loop_a _ H'p). lia. }
-      apply /HR2 /(R2_Some a''); [done|done|lia].
-    + by apply /HR2 /R2_None.
+      apply /HR /(R_Some a''); [done|done|lia].
+    + by apply /HR /R_None.
   - right. by exists (p', (a', b')).
 Qed.
 
@@ -669,18 +501,18 @@ Lemma big_wf_b p b (f : nat -> option nat) :
   non_terminating (p, (0, b)) +
   { '(p', (a', b')) | reaches (p, (0, b)) (p', (a', b')) /\ a' <= l /\ b' <= l }.
 Proof.
-  elim /(well_founded_induction_type wf_R2) : f p b.
-  move=> f IH p b HL.
+  elim /(well_founded_induction_type wf_R) : f p b.
+  move=> f IH p b Hf.
   have [[Hp|[[p' b'] Hp]]|[[p' [a' b']] [Hp ?]]] := next_waypoint_b p b.
   - left. by left.
   - have /= ? := reaches_plus_state_bound (Hp 0).
     set P := (_ + _ + _)%type.
-    have HR2 : R2 (update f p (Some b)) f -> P.
+    have HR : R (update f p (Some b)) f -> P.
     { move=> /IH /(_ p' b') /=. case; [|case|].
       - move=> p''' b'''. rewrite /update.
         case: (Nat.eq_dec p''' p).
         { by move=> -> [<-]. }
-        move=> ? /HL Hp''' n.
+        move=> ? /Hf Hp''' n.
         by apply: (reaches_plus_trans (Hp''' n) (Hp n)).
       - move=> /reaches_terminating Hp'. left. left.
         by apply /Hp' /reaches_plus_incl /(Hp 0).
@@ -691,11 +523,11 @@ Proof.
         by apply: (reaches_trans (reaches_plus_incl (Hp 0))). }
     case H'p: (f p) => [b''|].
     + case E: (b''-b) => [|?].
-      { left. right. move: H'p => /HL{HL} H'p.
+      { left. right. move: H'p => /Hf{Hf} H'p.
         apply: (reaches_non_terminating' (reaches_plus_incl (H'p 0))).
         apply: (loop_b _ H'p). lia. }
-      apply /HR2 /(R2_Some b''); [done|done|lia].
-    + by apply /HR2 /R2_None.
+      apply /HR /(R_Some b''); [done|done|lia].
+    + by apply /HR /R_None.
   - right. by exists (p', (a', b')).
 Qed.
 
