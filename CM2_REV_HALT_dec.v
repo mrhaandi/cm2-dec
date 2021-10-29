@@ -1,9 +1,7 @@
-
-
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
-Require Import M2.CM2.
+Require Import M2.CM2 M2.CM2_facts.
 
 Lemma eq_or_inf {X: Type} : (forall (x y: X), {x = y} + {x <> y}) ->
   forall (x y: X) P, (x = y) \/ P -> (x = y) + P.
@@ -13,15 +11,8 @@ Proof.
   - move=> ??. right. tauto.
 Qed.
 
-Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
-Proof.
-  elim: m; first by rewrite Nat.add_0_r.
-  move=> m /= <-. by have ->: n + S m = S n + m by lia.
-Qed.
-
 Lemma config_eta (x : Config) : x = (state x, (value1 x, value2 x)).
 Proof. by move: x => [? [? ?]]. Qed.
-
 
 (* an avid instruction may jump to a valid state (except the first) *)
 Inductive avid (l : nat) : Instruction -> Prop :=
@@ -99,12 +90,7 @@ Lemma multi_step_plus k x k' y :
   multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
 Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
 
-Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
-Proof.
-  move=> + ?. have ->: k' = (k' - k) + k by lia.
-  elim: (k' - k); first done.
-  by move=> ? IH /IH /= ->.
-Qed.
+
 
 Lemma step_None x : step x = None <-> nth_error M (state x) = None.
 Proof.

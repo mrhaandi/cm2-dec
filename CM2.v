@@ -8,8 +8,8 @@
 (* 
   Problem(s):
     Reversible Two Counter Machine Halting (CM2_REV_HALT)
-    Two Counter Machine Uniform Mortality (CM2_UMORTAL)
     Two Counter Machine Uniform Boundedness (CM2_UBOUNDED)
+    Two Counter Machine Uniform Mortality (CM2_UMORTAL)
 *)
 
 Require Import List.
@@ -67,11 +67,12 @@ Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option
 Definition multi_step (M: Cm2) (k: nat) (x: Config) : option Config :=
   Nat.iter k (option_bind (step M)) (Some x).
 
-Definition reaches (M: Cm2) (x y: Config) := exists k, multi_step M k x = Some y.
+Definition reaches (M: Cm2) (x y: Config) :=
+  exists k, multi_step M k x = Some y.
 
 (* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Cm2) (x: Config) :=
-  exists n, multi_step M n x = None.
+  exists k, multi_step M k x = None.
 
 (* injectivity of the step function *)
 Definition reversible (M : Cm2) : Prop := 
@@ -81,14 +82,24 @@ Definition reversible (M : Cm2) : Prop :=
 Definition bounded (k: nat) (M: Cm2) (x: Config) : Prop := 
   exists (L: list Config), (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L).
 
+Definition uniformly_bounded (M: Cm2) : Prop :=
+  exists k, forall x, bounded k M x.
+
+(* bound for the number of reachable configurations *)
+Definition mortal (k: nat) (M: Cm2) (x: Config) : Prop := 
+  multi_step M k x = None.
+
+Definition uniformly_mortal (M: Cm2) : Prop :=
+  exists k, forall x, mortal k M x.
+
 (* Reversible Two-counter Machine Halting Problem
    Given a reversible two-counter machine M and a configucation c, 
    does a run in M starting from c eventually terminate? *)
 Definition CM2_REV_HALT : { M: Cm2 | reversible M } * Config -> Prop :=
   fun '((exist _ M _), c) => terminating M c.
 
-Definition CM2_UMORTAL : Cm2 -> Prop :=
-  fun M => exists k, forall (x: Config), multi_step M k x = None.
-
 Definition CM2_UBOUNDED : Cm2 -> Prop :=
-  fun M => exists k, forall x, bounded k M x.
+  fun M => uniformly_bounded M.
+
+Definition CM2_UMORTAL : Cm2 -> Prop :=
+  fun M => uniformly_mortal M.

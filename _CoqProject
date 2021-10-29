@@ -1,6 +1,7 @@
 -Q . M2
 
 CM2.v
+CM2_facts.v
 CM2_REV_HALT_dec.v
 MM2.v
 MM2_HALT_dec.v

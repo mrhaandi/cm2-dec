@@ -1,8 +1,44 @@
-Require Import List Lia.
+Require Import List Lia PeanoNat.
 Import ListNotations.
 
-Require Import CM2.CM2.
-Require Import CM2.Nat_facts.
+Require Import M2.CM2.
+
+Require Import ssreflect ssrbool ssrfun.
+
+Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
+Proof.
+  elim: m; first by rewrite Nat.add_0_r.
+  move=> m /= <-. by have ->: n + S m = S n + m by lia.
+Qed.
+
+Lemma iter_None {X : Type} (f : X -> option X) k : Nat.iter k (option_bind f) None = None.
+Proof. elim: k; [done | by move=> /= ? ->]. Qed.
+
+Lemma option_bind_iter {X : Type} (f : X -> option X) k x : 
+  option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
+Proof. elim: k; [done|by move=> k /= ->]. Qed.
+
+Section Facts.
+Context {M : Cm2}.
+
+Notation step := (CM2.step M).
+Notation multi_step := (CM2.multi_step M).
+Notation reaches := (CM2.reaches M).
+
+Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
+Proof.
+  move=> + ?. have ->: k' = (k' - k) + k by lia.
+  elim: (k' - k); first done.
+  by move=> ? IH /IH /= ->.
+Qed.
+
+Lemma reaches_refl x : reaches x x.
+Proof. by exists 0. Qed.
+
+End Facts.
+
+(*
+Require Import M2.Nat_facts.
 
 Require Import ssreflect.
 
@@ -44,3 +80,4 @@ Proof.
   - move=> [] [] => [||?|?]; move: a b => [|?] [|?] /= ?; apply: IH => /=; by lia.
   - move=> ?. apply: IH => /=. by lia.
 Qed.
+*)

@@ -3,7 +3,7 @@
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect.
-Require Import M2.MM2.
+Require Import M2.MM2 .
 
 (* induction principle wrt. a decreasing measure f *)
 (* example: elim /(measure_ind length) : l. *)
