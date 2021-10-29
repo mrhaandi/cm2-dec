@@ -8,6 +8,8 @@
 (* 
   Problem(s):
     Reversible Two Counter Machine Halting (CM2_REV_HALT)
+    Two Counter Machine Uniform Mortality (CM2_UMORTAL)
+    Two Counter Machine Uniform Boundedness (CM2_UBOUNDED)
 *)
 
 Require Import List.
@@ -62,8 +64,10 @@ Definition step (M: Cm2) (x: Config) : option Config :=
 Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
   match oX with None => None | Some x => f x end.
 
-Definition multi_step (M: Cm2) (n: nat) (x: Config) : option Config :=
-  Nat.iter n (option_bind (step M)) (Some x).
+Definition multi_step (M: Cm2) (k: nat) (x: Config) : option Config :=
+  Nat.iter k (option_bind (step M)) (Some x).
+
+Definition reaches (M: Cm2) (x y: Config) := exists k, multi_step M k x = Some y.
 
 (* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Cm2) (x: Config) :=
@@ -73,61 +77,18 @@ Definition terminating (M: Cm2) (x: Config) :=
 Definition reversible (M : Cm2) : Prop := 
   forall x y z, step M x = Some z -> step M y = Some z -> x = y.
 
+(* bound for the number of reachable configurations *)
+Definition bounded (k: nat) (M: Cm2) (x: Config) : Prop := 
+  exists (L: list Config), (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L).
+
 (* Reversible Two-counter Machine Halting Problem
    Given a reversible two-counter machine M and a configucation c, 
    does a run in M starting from c eventually terminate? *)
 Definition CM2_REV_HALT : { M: Cm2 | reversible M } * Config -> Prop :=
   fun '((exist _ M _), c) => terminating M c.
 
-(*
+Definition CM2_UMORTAL : Cm2 -> Prop :=
+  fun M => exists k, forall (x: Config), multi_step M k x = None.
 
-(* Two Counter Machine Halting Problem
-   Does a run starting from
-   the configuration (state := 0, (value1 := 0, value2 := 0))
-   eventually terminate? *)
-Definition CM2_HALT : Cm2 -> Prop :=
-  fun M => terminating M (0, (0, 0)).
-
-(* halting configuration property *)
-Definition halting (M : Cm2) (x: Config) : Prop := step M x = None.
-
-Definition option_get {X : Type} (x : X) (oX : option X) : X :=
-  match oX with
-  | None => x
-  | Some x' => x'
-  end.
-
-Require Import ssreflect ssrbool ssrfun.
-Search (option _ -> _). Print oapp.
-Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
-  match oX with None => None | Some x => f x end.
-
-(* total two counter machine step function
-   which loops on halting configurations *)
-Definition total_step (M: Cm2) (x: Config) : Config :=
-  match step M x with None => x | Some y => y end.
-
-(* Two Counter Machine Halting Problem *)
-Definition CM2_HALT : Cm2 -> Prop :=
-  fun M => exists (n: nat), 
-    halting M (Nat.iter n (fun x => option_get x (step M x))) {| state := 0; value1 := 0; value2 := 0 |}).
-
-
-(* Two Counter Machine Halting Problem *)
-Definition CM2_HALT : Cm2 -> Prop :=
-  fun M => exists (n: nat), 
-    halting M (Nat.iter n (total_step M) {| state := 0; value1 := 0; value2 := 0 |}).
-
-    
-Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
-  match oX with None => None | Some x => f x end.
-  
-(* Two Counter Machine Halting Problem
-   Does a run starting from
-   the configuration {| state := 0; value1 := 0; value2 := 0 |}
-   eventually terminate? *)
-Definition CM2_HALT : Cm2 -> Prop :=
-  fun M => exists (n: nat), 
-    Nat.iter n (option_bind (step M)) (Some {| state := 0; value1 := 0; value2 := 0 |}) = None.
-
-    halting M (Nat.iter n (total_step M) {| state := 0; value1 := 0; value2 := 0 |}).*)
+Definition CM2_UBOUNDED : Cm2 -> Prop :=
+  fun M => exists k, forall x, bounded k M x.

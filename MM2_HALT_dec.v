@@ -28,19 +28,6 @@ Lemma option_bind_iter {X : Type} (f : X -> option X) k x :
   option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
 Proof. elim: k; [done|by move=> k /= ->]. Qed.
 
-Section ForallNorm.
-Context {X : Type} {P : X -> Prop}.
-
-Lemma ForallE {l} : Forall P l -> if l is x :: l then P x /\ Forall P l else True.
-Proof. by case. Qed.
-End ForallNorm.
-Lemma Forall_mapP {X Y : Type} {P : Y -> Prop} {f : X -> Y} {l : list X} : 
-  Forall P (map f l) <-> Forall (fun x => P (f x)) l.
-Proof.
-  elim: l; [constructor; by constructor | ].
-  move=> ? ? IH /=. constructor => /ForallE [? /IH ?]; by constructor.
-Qed.
-
 Lemma list_sum_map_le {X: Type} f g (L: list X) :
   (forall x, f x <= g x) ->
   list_sum (map f L) <= list_sum (map g L).
