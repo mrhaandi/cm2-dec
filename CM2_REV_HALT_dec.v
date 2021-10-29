@@ -3,7 +3,7 @@
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
-Require Import CM2.CM2.
+Require Import M2.CM2.
 
 Lemma eq_or_inf {X: Type} : (forall (x y: X), {x = y} + {x <> y}) ->
   forall (x y: X) P, (x = y) \/ P -> (x = y) + P.
@@ -27,7 +27,7 @@ Proof. by move: x => [? [? ?]]. Qed.
 Inductive avid (l : nat) : Instruction -> Prop :=
   | avidI p b : S p < l -> avid l (dec b (S p)).
 
-Section Reversible.
+Section Construction.
 Variable M : Cm2.
 Variable HM : reversible M.
 
@@ -1006,10 +1006,7 @@ Proof.
     by apply: H'z.
 Qed.
 
-End Reversible.
-
-Check uniform_decision.
-Print Assumptions uniform_decision.
+End Construction.
 
 (* decision procedure for the halting problem for reversible Cm2 *)
 Definition decider (M: Cm2) (HM: reversible M) (c: Config) : bool :=
@@ -1020,17 +1017,9 @@ Definition decider (M: Cm2) (HM: reversible M) (c: Config) : bool :=
 
 (* decision procedure correctness *)
 Lemma decider_spec (M: Cm2) (HM: reversible M) (c: Config) :
-  (decider M HM c = true) <-> (terminating M c).
+  (terminating M c) <-> (decider M HM c = true).
 Proof.
   rewrite /decider. case: (uniform_decision M HM c).
   - tauto.
-  - move=> H. split; [done | by move=> [k /H]].
-Qed.
-
-Theorem CM2_REV_HALT_dec :
-  exists f : { M: Cm2 | reversible M } * Config -> bool,
-  forall X, f X = true <-> CM2_REV_HALT X.
-Proof.
-  exists (fun '((exist _ M HM), c) => decider M HM c).
-  intros [[M HM] c]. exact (decider_spec M HM c).
+  - move=> H. split; [by move=> [k /H] | done].
 Qed.

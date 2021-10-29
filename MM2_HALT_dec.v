@@ -3,7 +3,7 @@
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect.
-Require Import CM2.MM2.
+Require Import M2.MM2.
 
 (* induction principle wrt. a decreasing measure f *)
 (* example: elim /(measure_ind length) : l. *)
@@ -60,8 +60,7 @@ Proof.
   - move=> /IH. have := Hfg y. lia.
 Qed.
 
-Section DECIDRE.
-
+Section Construction.
 Variable M : Mm2.
 
 Notation step := (MM2.step M).
@@ -605,9 +604,7 @@ Proof.
   - move: Hp' => /reaches_non_terminating H /H ?. by right.
 Qed.
 
-End DECIDRE.
-
-Print Assumptions uniform_decision.
+End Construction.
 
 (* decision procedure for the halting problem for Mm2 *)
 Definition decider (M: Mm2) (c: Config) : bool :=
@@ -618,19 +615,9 @@ Definition decider (M: Mm2) (c: Config) : bool :=
 
 (* decision procedure correctness *)
 Lemma decider_spec (M: Mm2) (c: Config) :
-  (decider M c = true) <-> (terminating M c).
+  (terminating M c) <-> (decider M c = true).
 Proof.
   rewrite /decider. case: (uniform_decision M c).
   - tauto.
-  - move=> H. split; [done | by move=> [k /H]].
+  - move=> H. split; [by move=> [k /H] | done].
 Qed.
-
-Theorem MM2_HALT_dec :
-  exists f : Mm2 * Config -> bool,
-  forall X, f X = true <-> MM2_HALT X.
-Proof.
-  exists (fun '(M, c) => decider M c).
-  intros [M c]. exact (decider_spec M c).
-Qed.
-
-Print Assumptions MM2_HALT_dec.
