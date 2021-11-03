@@ -18,7 +18,10 @@ Variable HK : forall x, bounded K x.
 Notation step := (CM2.step M).
 Notation multi_step := (CM2.multi_step M).
 Notation mortal := (CM2.mortal M).
+Notation reaches_plus := (CM2_facts.reaches_plus M).
+Notation non_terminating := (CM2_facts.non_terminating M).
 
+(*
 Lemma bounded_inf k x : bounded k x -> {L | (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L) }.
 Proof.
   move=> Hkx. exists (map (fun n => if multi_step n x is Some y then y else x) (seq 0 k)).
@@ -26,20 +29,49 @@ Proof.
   move=> y Hxy. admit. (* hard, doable *)
 Admitted.
 
+
 Lemma pointwise_decision k x : (mortal k x) + (not (mortal k x)).
 Proof. rewrite /mortal. by case: (multi_step k x) => [y|]; [right|left]. Qed.
+*)
 
-Lemma pigeonhole {X : Type} (L L' : list X) : incl L L' -> length L' < length L -> not (NoDup L).
-Proof. Admitted.
+Lemma pigeonhole {X : Type} (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) (L L' : list X) : incl L L' -> length L' < length L -> not (NoDup L).
+Proof.
+  move=> ++ HL. elim: HL L'.
+  { move=> /=. lia. }
+  move=> x {}L HxL HL IH L' /(@incl_cons_inv X) [/(@remove_length_lt X X_eq_dec) HxL' HLL'].
+  move: HLL' => /(@remove_incl X X_eq_dec L L' x).
+  rewrite notin_remove /=; first done.
+  move=> /IH. lia.
+Qed.
 
-Lemma dup_seq {X : Type} (f : nat -> X) start len :
+Lemma NoDup_dec {X: Type} (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) (L : list X) : {NoDup L} + {not (NoDup L)}.
+Proof.
+  elim: L.
+  {left. by constructor. }
+  move=> x L [IH|IH].
+  - have [HxL|HxL] := In_dec X_eq_dec x L.
+    + right. move=> /NoDup_cons_iff. tauto.
+    + left. by constructor.
+  - right. by move=> /NoDup_cons_iff [_ /IH].
+Qed.
+
+(* explicit duplicates in a mapped sequence *)
+Lemma dup_seq {X : Type} (f : nat -> X) (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) start len :
   not (NoDup (map f (seq start len))) ->
-  exists '(i, j), f i = f j /\ (start <= i /\ i < j /\ j <= start+len).
+  exists '(i, j), f i = f j /\ (start <= i /\ i < j /\ j < start+len).
 Proof.
   elim: len start.
   { move=> start /= H. exfalso. apply: H. by constructor. }
   move=> len IH start /=.
-Admitted. 
+  have [|] := NoDup_dec X_eq_dec (map f (seq (S start) len)).
+  - move=> H1f H2f. have : In (f start) (map f (seq (S start) len)).
+    { have [|] := In_dec X_eq_dec (f start) (map f (seq (S start) len)); first done.
+      by move: H1f => /(@NoDup_cons X) H /H /H2f. }
+    move=> /in_map_iff [j] [?] /in_seq ?. exists (start, j).
+    split; first done. lia.
+  - move=> /IH [[i j]] [? ?] _.
+    exists (i, j). split; first done. lia.
+Qed.
 
 Lemma mortal_bound k x : mortal k x -> mortal K x.
 Proof.
@@ -53,15 +85,25 @@ Proof.
     { move: Hk' => /(multi_step_k_monotone K) /(_ ltac:(lia)).
       by rewrite Hxy. }
     move=> <-. apply: HL. by exists k'. }
-  move=> /pigeonhole. rewrite map_length seq_length.
-  move=> /(_ ltac:(lia)) /dup_seq [[k1 k2]] [+ ?].
+  have Config_eq_dec : (forall x y : Config, {x = y} + {x <> y}) by do ? decide equality.
+  move=> /(pigeonhole Config_eq_dec). rewrite map_length seq_length.
+  move=> /(_ ltac:(lia)) /(dup_seq _ Config_eq_dec).
+  move=> [[k1 k2]] [+ ?].
   case Hk1: (multi_step k1 x) => [z|]; first last.
-  { admit. (* easy *) }
+  { move: Hk1 => /(multi_step_k_monotone K) /(_ ltac:(lia)).
+    by rewrite Hxy. }
   case Hk2: (multi_step k2 x) => [z'|]; first last.
-  { admit. (* easy *) }
+  { move: Hk2 => /(multi_step_k_monotone K) /(_ ltac:(lia)).
+    by rewrite Hxy. }
   move=> ?. subst z'.
-  admit. (* doable *)
-Admitted.
+  move=> Hk. suff: non_terminating x.
+  { move=> /(_ k). by rewrite Hk. }
+  suff: non_terminating z.
+  { move=> /reaches_non_terminating. apply. by exists k1. }
+  apply: reaches_plus_self_loop. exists (k2-k1).
+  split; first by lia.
+  by rewrite (ltac:(lia) : k2 = k1 + (k2-k1)) (multi_step_plus Hk1) in Hk2.
+Qed.
 
 Lemma pos_K : K = 1 + (K - 1).
 Proof.
@@ -76,7 +118,7 @@ Qed.
 Lemma mortal_K_bound_a {p a b} :
   K <= a -> mortal K (p, (a, b)) <-> mortal K (p, (K, b)).
 Proof.
-  rewrite /(mortal _). elim: (K) p a b; first done.
+  rewrite /mortal. elim: (K) p a b; first done.
   move=> K' IH p a b Ha.
   rewrite /= ?option_bind_iter /step -/step /=.
   case: (nth_error M p) => [i|]; last done.
@@ -100,7 +142,26 @@ Qed.
 Lemma mortal_K_bound_b {p a b} :
   K <= b -> mortal K (p, (a, b)) <-> mortal K (p, (a, K)).
 Proof.
-Admitted.
+  rewrite /mortal. elim: (K) p a b; first done.
+  move=> K' IH p a b Hb.
+  rewrite /= ?option_bind_iter /step -/step /=.
+  case: (nth_error M p) => [i|]; last done.
+  case: i.
+  - move=> c. rewrite -?/(multi_step _ _).
+    rewrite (IH _ (_ + a) (_ + b) ltac:(lia)).
+    by rewrite (IH _ (_ + a) (_ + (S K')) ltac:(lia)).
+  - move=> [] q.
+    + case: b Hb => [|b] Hb; first by lia.
+      rewrite -?/(multi_step _ _).
+      apply: IH. lia.
+    + case: a => [|a].
+      * rewrite -?/(multi_step _ _).
+        rewrite (IH _ 0 b ltac:(lia)).
+        by rewrite (IH _ 0 (S K') ltac:(lia)).
+      * rewrite -?/(multi_step _ _).
+        rewrite (IH _ a b ltac:(lia)).
+        by rewrite (IH _ a (S K') ltac:(lia)).
+Qed.
 
 Lemma uniform_decision : (uniformly_mortal M) + (not (uniformly_mortal M)).
 Proof.

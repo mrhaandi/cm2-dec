@@ -86,18 +86,6 @@ Qed.
 Notation terminating := (CM2.terminating M).
 Definition non_terminating x := forall k, multi_step k x <> None.
 
-Lemma multi_step_plus k x k' y :
-  multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
-Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
-
-
-
-Lemma step_None x : step x = None <-> nth_error M (state x) = None.
-Proof.
-  rewrite /step. case: (nth_error M (state x)) => [i|]; last done.
-  case: i; first done.
-  by move: (value1 x) (value2 x) => [|?] [|?] [].
-Qed.
 
 Opaque nth_error.
 Arguments nth_error_In {_ _ _ _}.
@@ -461,7 +449,7 @@ Proof.
   { (* termination *)
     move=> /nth_error_None H'z. do 4 left. exists (k+(1+1)).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) ->.
+    move: Hz => /(@multi_step_plus M 1) ->.
     by rewrite /= /step H'z. }
   move=> /= ?. subst pz.
   move: az bz Hz => [|az] [|bz] Hz.
@@ -540,7 +528,7 @@ Proof.
     do 4 left. move=> [|a].
     { move: HS => /(_ by') [k'' ?]. exists (k' + (1 + k'')).
       move: Hx' => /multi_step'_incl /multi_step_plus ->.
-      by move: H'x' => /(multi_step_plus 1) ->. }
+      by move: H'x' => /(@multi_step_plus M 1) ->. }
     move: Hx' => /multi_step'E [n] [m] /= [?] [?].
     move=> /(_ (S (S a)) 0 ltac:(lia) ltac:(lia)).
     move: H'x' => /(step_parallel (state x', (S (S a) + n, m))) /=.
@@ -552,10 +540,10 @@ Proof.
     move=> /(_ ltac:(lia)).
     move=> [z] [Hz] [?] ? Hk. exists (k' + (1 + (k + (1 + 1)))).
     move: Hx' => /multi_step'_incl /multi_step_plus ->.
-    move: Hz' => /(multi_step_plus 1) ->.
+    move: Hz' => /(@multi_step_plus M 1) ->.
     have ->: pz' = 0 by lia. 
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) -> /=.
+    move: Hz => /(@multi_step_plus M 1) -> /=.
     apply /step_None /nth_error_None. by lia. }
   (* case (1, 1) f->>t-> (a, b) at index 0 *)
   move=> H0y. move Ha'y: (value1 y) => a'y. move Hb'y: (value2 y) => b'y.
@@ -573,7 +561,7 @@ Proof.
     move: Hx H'x => /dec_a_0 H. rewrite (config_eta y) H0y H1y H2y.
     move=> /H {H} => /(_ a (S by')) [k'' Hk''].
     exists (k' + (1 + k'')), (a * b'y + by').
-    move: Hk' Hy' Hk'' => /multi_step_plus -> /(multi_step_plus 1) ->.
+    move: Hk' Hy' Hk'' => /multi_step_plus -> /(@multi_step_plus M 1) ->.
     have ->: y' = (0, (a, S by')).
     { rewrite (config_eta y') -H0y'. congr pair. congr pair; lia. }
     move=> ->. congr Some. congr pair. congr pair. lia.
@@ -594,7 +582,7 @@ Proof.
       have [k''] := H a (S by'). have ->: S by' * 0 + a = a by lia.
       move=> Hk''. subst pz. exists (k' + (1 + k'')).
       move: Hk' => /multi_step_plus ->.
-      move: Hz => /(multi_step_plus 1) ->.
+      move: Hz => /(@multi_step_plus M 1) ->.
       rewrite -Hk''. congr (multi_step k'' _). congr pair. congr pair; lia.
     + (* non-termination *)
       do 3 left. right. move=> a. apply: transition_loop => a' b' ??.
@@ -605,7 +593,7 @@ Proof.
       have [k'' Hk''] := H az bz.
       exists (k'+(1 + k'')), (bz * S a'y + az), 0.
       move: Hk' Hz Hk'' => /multi_step'_incl /multi_step_plus ->.
-      move=> /(multi_step_plus 1) -> ->.
+      move=> /(@multi_step_plus M 1) -> ->.
       split; first done. lia.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
     do 3 left. right. move=> a. apply: dec_loop; [eassumption|].
@@ -672,7 +660,7 @@ Proof.
     do 4 left. move=> [|b].
     { move: HS => /(_ ay') [k'' ?]. exists (k' + (1 + k'')).
       move: Hx' => /multi_step'_incl /multi_step_plus ->.
-      by move: H'x' => /(multi_step_plus 1) ->. }
+      by move: H'x' => /(@multi_step_plus M 1) ->. }
     move: Hx' => /multi_step'E [n] [m] /= [?] [?].
     move=> /(_ 0 (S (S b)) ltac:(lia) ltac:(lia)).
     move: H'x' => /(step_parallel (state x', (n, S (S b) + m))) /=.
@@ -684,10 +672,10 @@ Proof.
     move=> /(_ ltac:(lia)) [z] [Hz] [?] ? Hk.
     exists (k' + (1 + (k + (1 + 1)))).
     move: Hx' => /multi_step'_incl /multi_step_plus ->.
-    move: Hz' => /(multi_step_plus 1) ->.
+    move: Hz' => /(@multi_step_plus M 1) ->.
     have ->: pz' = 0 by lia. 
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) -> /=.
+    move: Hz => /(@multi_step_plus M 1) -> /=.
     apply /step_None /nth_error_None. by lia. }
   (* case (1, 1) f->>t-> (a, b) at index 0 *)
   move=> H0y. move Ha'y: (value1 y) => a'y. move Hb'y: (value2 y) => b'y.
@@ -705,7 +693,7 @@ Proof.
     move: Hx H'x => /dec_b_0 H. rewrite (config_eta y) H0y H1y H2y.
     move=> /H {H} => /(_ (S ay') b) [k'' Hk''].
     exists (k' + (1 + k'')), (b * a'y + ay').
-    move: Hk' Hy' Hk'' => /multi_step_plus -> /(multi_step_plus 1) ->.
+    move: Hk' Hy' Hk'' => /multi_step_plus -> /(@multi_step_plus M 1) ->.
     have ->: y' = (0, (S ay', b)).
     { rewrite (config_eta y') -H0y'. congr pair. congr pair; lia. }
     move=> ->. congr Some. congr pair. congr pair. lia.
@@ -726,7 +714,7 @@ Proof.
       have [k''] := H (S ay') b. have ->: S ay' * 0 + b = b by lia.
       move=> Hk''. subst pz. exists (k' + (1 + k'')).
       move: Hk' => /multi_step_plus ->.
-      move: Hz => /(multi_step_plus 1) ->.
+      move: Hz => /(@multi_step_plus M 1) ->.
       rewrite -Hk''. congr (multi_step k'' _). congr pair. congr pair; lia.
     + (* non-termination *)
       do 3 left. right. move=> b. apply: transition_loop => a' b' ??.
@@ -737,7 +725,7 @@ Proof.
       have [k'' Hk''] := H az bz.
       exists (k'+(1 + k'')), 0, (az * S b'y + bz).
       move: Hk' Hz Hk'' => /multi_step'_incl /multi_step_plus ->.
-      move=> /(multi_step_plus 1) -> ->.
+      move=> /(@multi_step_plus M 1) -> ->.
       split; first done. lia.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
     do 3 left. right. move=> b. apply: dec_loop; [eassumption|].
@@ -976,19 +964,19 @@ Proof.
   { (* termination *)
     move=> /nth_error_None Hpz. left. exists (k+(1+1)).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) ->.
+    move: Hz => /(@multi_step_plus M 1) ->.
     by apply /step_None. }
   move=> ?. subst pz.
   case: (uniform_decision_0 az bz).
   - (* termination *)
     move=> + /ltac:(left). move=> [k' Hk']. exists (k+(1+k')).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    by move: Hz => /(multi_step_plus 1) ->.
+    by move: Hz => /(@multi_step_plus M 1) ->.
   - (* non-termination *)
     move=> H'z. right=> k'.
     move=> /(multi_step_k_monotone (k+(1+k'))) /(_ ltac:(lia)).
     move: Hk => /multi_step'_incl /multi_step_plus ->.
-    move: Hz => /(multi_step_plus 1) ->.
+    move: Hz => /(@multi_step_plus M 1) ->.
     by apply: H'z.
 Qed.
 

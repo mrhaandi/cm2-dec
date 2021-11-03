@@ -18,12 +18,19 @@ Lemma option_bind_iter {X : Type} (f : X -> option X) k x :
   option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
 Proof. elim: k; [done|by move=> k /= ->]. Qed.
 
+
+Definition reaches_plus (M: Cm2) (x y: Config) := exists k, 0 < k /\ multi_step M k x = Some y.
+Definition non_terminating (M: Cm2) x := forall k, multi_step M k x <> None.
+
 Section Facts.
 Context {M : Cm2}.
 
 Notation step := (CM2.step M).
 Notation multi_step := (CM2.multi_step M).
 Notation reaches := (CM2.reaches M).
+Notation reaches_plus := (reaches_plus M).
+Notation terminating := (CM2.terminating M).
+Notation non_terminating := (non_terminating M).
 
 Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
 Proof.
@@ -34,6 +41,76 @@ Qed.
 
 Lemma reaches_refl x : reaches x x.
 Proof. by exists 0. Qed.
+
+Lemma multi_step_plus {k x k' y} :
+  multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
+Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
+
+Lemma step_None x : step x = None <-> nth_error M (state x) = None.
+Proof.
+  rewrite /step. case: (nth_error M (state x)) => [i|]; last done.
+  case: i; first done.
+  by move: (value1 x) (value2 x) => [|?] [|?] [].
+Qed.
+
+Lemma reaches_plus_reaches {x y z} : reaches_plus x y -> reaches y z -> reaches_plus x z.
+Proof.
+  move=> [k [? Hk]] [k' Hk']. exists (k+k'). split; first by lia.
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+Lemma reaches_reaches_plus {x y z} : reaches x y -> reaches_plus y z -> reaches_plus x z.
+Proof.
+  move=> [k Hk] [k' [? Hk']]. exists (k+k'). split; first by lia.
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
+Proof. move=> [k [? Hk]]. by exists k. Qed.
+
+Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
+Proof.
+  move=> [k Hk] [k' Hk']. exists (k+k').
+  move: Hk. by rewrite /multi_step iter_plus => ->.
+Qed.
+
+Lemma reaches_non_terminating {x y} : reaches x y -> non_terminating y -> non_terminating x.
+Proof.
+  move=> [k Hk] Hy k'.
+  have [|->] : k' <= k \/ k' = k + (k' - k) by lia.
+  - by move: Hk => + /multi_step_k_monotone H /H => ->.
+  - rewrite (multi_step_plus Hk). by apply: Hy.
+Qed.
+
+Lemma reaches_non_terminating' {x y} : reaches x y -> non_terminating x -> non_terminating y.
+Proof.
+  move=> [k' Hk'] Hx k Hk.
+  apply: (Hx (k' + k)).
+  by rewrite (multi_step_plus Hk').
+Qed.
+
+Lemma reaches_plus_state_bound {x y} : reaches_plus x y -> state x < length M.
+Proof.
+  move=> [k [? Hk]].
+  suff: not (length M <= state x) by lia.
+  move=> /nth_error_None Hx.
+  move: Hk. have ->: k = S (k - 1) by lia.
+  by rewrite /= option_bind_iter /step Hx iter_None.
+Qed.
+
+Lemma reaches_plus_trans {x y z} : reaches_plus x y -> reaches_plus y z -> reaches_plus x z.
+Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
+
+Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
+Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (multi_step_plus Hk). Qed.
+
+Lemma reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
+Proof.
+  move=> [k [? Hk]]. elim; first done.
+  move=> k' Hk'.
+  move=> /(multi_step_k_monotone (k + k')) /(_ ltac:(lia)).
+  by rewrite (multi_step_plus Hk).
+Qed.
 
 End Facts.
 
