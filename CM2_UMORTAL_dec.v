@@ -1,21 +1,25 @@
-Require Import List PeanoNat Lia Operators_Properties.
+Require Import List PeanoNat Lia Operators_Properties ConstructiveEpsilon.
 Import ListNotations.
 
 Require Import ssreflect ssrbool ssrfun.
 Require Import M2.CM2 M2.CM2_facts.
+Require M2.CM2_UBOUNDED_dec.
 
 Section BoundConstruction.
 
 Variable M : Cm2.
+
+Notation bounded := (bounded M).
+
 (* uniform bound *)
 Variable K : nat.
-Variable HK : forall x, bounded K M x.
+Variable HK : forall x, bounded K x.
 
 Notation step := (CM2.step M).
 Notation multi_step := (CM2.multi_step M).
-Notation mortal K := (CM2.mortal K M).
+Notation mortal := (CM2.mortal M).
 
-Lemma bounded_inf k x : bounded k M x -> {L | (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L) }.
+Lemma bounded_inf k x : bounded k x -> {L | (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L) }.
 Proof.
   move=> Hkx. exists (map (fun n => if multi_step n x is Some y then y else x) (seq 0 k)).
   split; first by rewrite map_length seq_length.
@@ -23,7 +27,7 @@ Proof.
 Admitted.
 
 Lemma pointwise_decision k x : (mortal k x) + (not (mortal k x)).
-Proof. rewrite /(mortal k). by case: (multi_step k x) => [y|]; [right|left]. Qed.
+Proof. rewrite /mortal. by case: (multi_step k x) => [y|]; [right|left]. Qed.
 
 Lemma pigeonhole {X : Type} (L L' : list X) : incl L L' -> length L' < length L -> not (NoDup L).
 Proof. Admitted.
@@ -39,7 +43,7 @@ Admitted.
 
 Lemma mortal_bound k x : mortal k x -> mortal K x.
 Proof.
-  rewrite /(mortal k). have [HkK|HKk] : k <= K \/ K < k by lia.
+  rewrite /mortal. have [HkK|HKk] : k <= K \/ K < k by lia.
   { move=> /multi_step_k_monotone. by apply. }
   case Hxy: (multi_step K x) => [y|]; last done.
   have [L [? HL]] := HK x.
@@ -151,6 +155,32 @@ Proof.
 Qed.
 
 End BoundRefutation.
+
+(* informative decision statement for uniform boundedness for Cm2 *)
+Theorem decision (M: Cm2) : (uniformly_mortal M) + (not (uniformly_mortal M)).
+Proof.
+  case: (CM2_UBOUNDED_dec.decision M).
+  - move=> /constructive_indefinite_ground_description.
+    move=> /(_ id id ltac:(done) (CM2_UBOUNDED_dec.fixed_decision M)).
+    by move=> [K /uniform_decision].
+  - move=> H. right. by apply: not_uniformly_mortal.
+Qed.
+
+(* boolean decision procedure for uniform mortality for Cm2 *)
+Definition decider (M: Cm2) : bool :=
+  match decision M with
+  | inl _ => true
+  | inr _ => false
+  end.
+
+(* decision procedure correctness *)
+Lemma decider_spec (M: Cm2) :
+  (uniformly_mortal M) <-> (decider M = true).
+Proof.
+  rewrite /decider. case: (decision M); intuition done.
+Qed.
+
+Print Assumptions decider.
 
 (* BoundConstruction decides uniform mortality knowing uniform bound
 BoundRefutation refutes uniform mortality with no uniform bound *)

@@ -79,18 +79,18 @@ Definition reversible (M : Cm2) : Prop :=
   forall x y z, step M x = Some z -> step M y = Some z -> x = y.
 
 (* bound for the number of reachable configurations *)
-Definition bounded (k: nat) (M: Cm2) (x: Config) : Prop := 
+Definition bounded (M: Cm2) (k: nat) (x: Config) : Prop := 
   exists (L: list Config), (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L).
 
 Definition uniformly_bounded (M: Cm2) : Prop :=
-  exists k, forall x, bounded k M x.
+  exists k, forall x, bounded M k x.
 
 (* bound for the number of reachable configurations *)
-Definition mortal (k: nat) (M: Cm2) (x: Config) : Prop := 
+Definition mortal (M: Cm2) (k: nat) (x: Config) : Prop := 
   multi_step M k x = None.
 
 Definition uniformly_mortal (M: Cm2) : Prop :=
-  exists k, forall x, mortal k M x.
+  exists k, forall x, mortal M k x.
 
 (* Reversible Two-counter Machine Halting Problem
    Given a reversible two-counter machine M and a configucation c, 
