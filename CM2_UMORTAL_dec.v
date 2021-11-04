@@ -34,44 +34,8 @@ Lemma pointwise_decision k x : (mortal k x) + (not (mortal k x)).
 Proof. rewrite /mortal. by case: (multi_step k x) => [y|]; [right|left]. Qed.
 *)
 
-Lemma pigeonhole {X : Type} (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) (L L' : list X) : incl L L' -> length L' < length L -> not (NoDup L).
-Proof.
-  move=> ++ HL. elim: HL L'.
-  { move=> /=. lia. }
-  move=> x {}L HxL HL IH L' /(@incl_cons_inv X) [/(@remove_length_lt X X_eq_dec) HxL' HLL'].
-  move: HLL' => /(@remove_incl X X_eq_dec L L' x).
-  rewrite notin_remove /=; first done.
-  move=> /IH. lia.
-Qed.
 
-Lemma NoDup_dec {X: Type} (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) (L : list X) : {NoDup L} + {not (NoDup L)}.
-Proof.
-  elim: L.
-  {left. by constructor. }
-  move=> x L [IH|IH].
-  - have [HxL|HxL] := In_dec X_eq_dec x L.
-    + right. move=> /NoDup_cons_iff. tauto.
-    + left. by constructor.
-  - right. by move=> /NoDup_cons_iff [_ /IH].
-Qed.
 
-(* explicit duplicates in a mapped sequence *)
-Lemma dup_seq {X : Type} (f : nat -> X) (X_eq_dec : forall (x y : X), {x = y} + {x <> y}) start len :
-  not (NoDup (map f (seq start len))) ->
-  exists '(i, j), f i = f j /\ (start <= i /\ i < j /\ j < start+len).
-Proof.
-  elim: len start.
-  { move=> start /= H. exfalso. apply: H. by constructor. }
-  move=> len IH start /=.
-  have [|] := NoDup_dec X_eq_dec (map f (seq (S start) len)).
-  - move=> H1f H2f. have : In (f start) (map f (seq (S start) len)).
-    { have [|] := In_dec X_eq_dec (f start) (map f (seq (S start) len)); first done.
-      by move: H1f => /(@NoDup_cons X) H /H /H2f. }
-    move=> /in_map_iff [j] [?] /in_seq ?. exists (start, j).
-    split; first done. lia.
-  - move=> /IH [[i j]] [? ?] _.
-    exists (i, j). split; first done. lia.
-Qed.
 
 Lemma mortal_bound k x : mortal k x -> mortal K x.
 Proof.
@@ -87,7 +51,7 @@ Proof.
     move=> <-. apply: HL. by exists k'. }
   have Config_eq_dec : (forall x y : Config, {x = y} + {x <> y}) by do ? decide equality.
   move=> /(pigeonhole Config_eq_dec). rewrite map_length seq_length.
-  move=> /(_ ltac:(lia)) /(dup_seq _ Config_eq_dec).
+  move=> /(_ ltac:(lia)) /(dup_seq Config_eq_dec).
   move=> [[k1 k2]] [+ ?].
   case Hk1: (multi_step k1 x) => [z|]; first last.
   { move: Hk1 => /(multi_step_k_monotone K) /(_ ltac:(lia)).

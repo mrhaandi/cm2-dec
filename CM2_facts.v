@@ -18,6 +18,50 @@ Lemma option_bind_iter {X : Type} (f : X -> option X) k x :
   option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
 Proof. elim: k; [done|by move=> k /= ->]. Qed.
 
+Section Dup.
+
+Context {X : Type} (X_eq_dec : forall (x y : X), {x = y} + {x <> y}).
+
+Lemma pigeonhole (L L' : list X) : incl L L' -> length L' < length L -> not (NoDup L).
+Proof.
+  move=> ++ HL. elim: HL L'.
+  { move=> /=. lia. }
+  move=> x {}L HxL HL IH L' /(@incl_cons_inv X) [/(@remove_length_lt X X_eq_dec) HxL' HLL'].
+  move: HLL' => /(@remove_incl X X_eq_dec L L' x).
+  rewrite notin_remove /=; first done.
+  move=> /IH. lia.
+Qed.
+
+Lemma NoDup_dec (L : list X) : {NoDup L} + {not (NoDup L)}.
+Proof.
+  elim: L.
+  {left. by constructor. }
+  move=> x L [IH|IH].
+  - have [HxL|HxL] := In_dec X_eq_dec x L.
+    + right. move=> /NoDup_cons_iff. tauto.
+    + left. by constructor.
+  - right. by move=> /NoDup_cons_iff [_ /IH].
+Qed.
+
+(* explicit duplicates in a mapped sequence *)
+Lemma dup_seq (f : nat -> X) start len :
+  not (NoDup (map f (seq start len))) ->
+  exists '(i, j), f i = f j /\ (start <= i /\ i < j /\ j < start+len).
+Proof.
+  elim: len start.
+  { move=> start /= H. exfalso. apply: H. by constructor. }
+  move=> len IH start /=.
+  have [|] := NoDup_dec (map f (seq (S start) len)).
+  - move=> H1f H2f. have : In (f start) (map f (seq (S start) len)).
+    { have [|] := In_dec X_eq_dec (f start) (map f (seq (S start) len)); first done.
+      by move: H1f => /(@NoDup_cons X) H /H /H2f. }
+    move=> /in_map_iff [j] [?] /in_seq ?. exists (start, j).
+    split; first done. lia.
+  - move=> /IH [[i j]] [? ?] _.
+    exists (i, j). split; first done. lia.
+Qed.
+
+End Dup.
 
 Definition reaches_plus (M: Cm2) (x y: Config) := exists k, 0 < k /\ multi_step M k x = Some y.
 Definition non_terminating (M: Cm2) x := forall k, multi_step M k x <> None.

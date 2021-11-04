@@ -11,17 +11,46 @@ Notation bounded := (CM2.bounded M).
 
 Definition path k x := map (fun n => if multi_step n x is Some y then y else x) (seq 0 k).
 
-Lemma length_path {k x} : length (path k x) = k.
+Lemma path_length {k x} : length (path k x) = k.
 Proof. by rewrite /path map_length seq_length. Qed.
 
 Lemma Config_eq_dec (x y : Config) : {x = y} + {x <> y}.
 Proof. by do ? decide equality. Qed.
 
+Lemma In_pathE K x y : In y (path K x) -> x = y \/ exists k, 0 < k < K /\ multi_step k x = Some y.
+Proof.
+  move=> /in_map_iff [[|k]].
+  { move=> [<-] _. by left. }
+  case Hk: (multi_step (S k) x) => [z|].
+  - move=> [<-] /in_seq ?. right. exists (S k).
+    split; [lia|done].
+  - move=> [? _]. by left.
+Qed.
+
+Lemma let_try K x y : multi_step K x = Some y ->
+(In y (path K x) <-> bounded K x).
+Proof.
+  elim: K x.
+  { move=> x /= _. split; first done.
+    move=> [[|? L]] /= []; last by lia.
+    move=> _ /(_ x). apply. by apply: reaches_refl. }
+  move=> K IH x. rewrite [multi_step _ _]/= option_bind_iter.
+  case Hxz: (step M x) => [z|]; last by rewrite iter_None.
+  rewrite -/(multi_step _ _) => HK.
+  move: (HK) => /IH {}IH. split.
+  - move=> /In_pathE [].
+    + move=> ?. subst y. exists (path (K+1) x). admit.
+    + move=> [k [? Hk]].
+      have : In y (path K z).
+      { apply /in_map_iff. exists (k-1).  }
+      admit.
+Admitted.
+
 Lemma pointwise_decision K x : {bounded K x} + {not (bounded K x)}.
 Proof.
   case HK: (multi_step K x) => [y|].
   - have [Hy|Hy] := In_dec Config_eq_dec y (path K x).
-    + left. exists (path K x). rewrite length_path.
+    + left. exists (path K x). rewrite path_length.
       split; first done.
       move: (Hy) => /in_map_iff [k].
       case Hk: (multi_step k x) => [z|]; first last.
@@ -44,7 +73,14 @@ Proof.
       move=> /multi_step_plus -> Hk''. apply /in_map_iff. exists (k+k'').
       rewrite (multi_step_plus Hk) Hk''. split; first done.
       apply /in_seq. lia.
-    + right. admit.
+    + right. move=> [L [? HL]].
+      apply: (pigeonhole Config_eq_dec (path (K+1) x) L).
+      * move=> z /in_map_iff [k] [<-] _. apply: HL.
+        case Hk: (multi_step k x) => [{}z|]; [by exists k | by exists 0].
+      * rewrite path_length. lia.
+      * case: (NoDup_dec Config_eq_dec (path (K + 1) x)); first done.
+        move=> /(dup_seq Config_eq_dec) [[i j]].
+        admit.
   - left. exists (path K x). rewrite length_path. split; first done.
     move=> y [k]. have [?|?] : k < K \/ K <= k by lia.
     + move=> Hk. apply /in_map_iff. exists k. rewrite Hk in_seq.
