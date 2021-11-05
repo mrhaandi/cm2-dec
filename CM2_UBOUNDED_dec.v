@@ -1,4 +1,4 @@
-Require Import List PeanoNat Lia Operators_Properties.
+Require Import List PeanoNat Lia Relation_Operators Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
 Require Import M2.CM2 M2.CM2_facts.
@@ -8,6 +8,8 @@ Variable M : Cm2.
 
 Notation multi_step := (CM2.multi_step M).
 Notation bounded := (CM2.bounded M).
+Notation step := (CM2.step M).
+Notation reaches := (CM2.reaches M).
 
 Definition path k x := map (fun n => if multi_step n x is Some y then y else x) (seq 0 k).
 
@@ -27,6 +29,49 @@ Proof.
   - move=> [? _]. by left.
 Qed.
 
+Lemma reachesE x y : reaches x y -> clos_refl_trans Config (fun x' y' => step x' = Some y') x y.
+Proof.
+  move=> [k]. elim: k x.
+  { move=> x [] <-. by apply: rt_refl. }
+  move=> k IH x. rewrite /= option_bind_iter.
+  case Hxz: (step x) => [z|]; last by rewrite iter_None.
+  move=> /IH ?. apply: rt_trans; last by eassumption.
+  by apply: rt_step.
+Qed.
+
+Lemma let_try2 K x y : multi_step K x = Some y ->
+  In y (path K x) -> forall z, reaches x z -> In z (path K x).
+Proof.
+  elim: K y; first done.
+  move=> K IH y. rewrite [multi_step _ _]/=.
+  case Hxz: (multi_step K x) => [z|]; last done.
+  move=> Hzy. have -> : S K = K + 1 by lia.
+  rewrite /path seq_app map_app -/(path _ _) /= Hxz.
+  move=> /in_app_iff [|].
+  - move=> /IH.  Hxz => /IH {}IH. 
+  move=> Hy. move: (Hy) => /IH {}IH. rewrite [In y _]/= => - [|].
+  { move=> ? z'. subst y.    } 
+  { done. }
+
+Lemma let_try2_dups K x y : multi_step K x = Some y ->
+  In y (path K x) -> forall z, reaches x z -> In z (path K x).
+Proof.
+  move=> HK Hy.
+  have /(pigeonhole Config_eq_dec) : incl (path (K+1) x) (path K x).
+  { move=> z. rewrite /path seq_app map_app.
+    move=> /in_app_iff [|]; first done.
+    rewrite /= HK. by move=> [<-|]. }
+  rewrite ?path_length => /(_ ltac:(lia)).
+  move=> /(dup_seq Config_eq_dec).
+  
+  Search (In _ (_ ++ _)). Search (seq _ (_ + _)).  }
+  elim: K x; first done.
+  move=> K IH x. rewrite [multi_step _ _]/= option_bind_iter.
+  case Hxz: (step x) => [z|]; last by rewrite iter_None.
+  move=> Hy. move: (Hy) => /IH {}IH. rewrite [In y _]/= => - [|].
+  { move=> ? z'. subst y.    } 
+  { done. }
+
 Lemma let_try K x y : multi_step K x = Some y ->
 (In y (path K x) <-> bounded K x).
 Proof.
@@ -39,11 +84,21 @@ Proof.
   rewrite -/(multi_step _ _) => HK.
   move: (HK) => /IH {}IH. split.
   - move=> /In_pathE [].
-    + move=> ?. subst y. exists (path (K+1) x). admit.
+    + move=> ?. subst y. exists (path (K+1) x).
+      rewrite path_length. split; first by lia.
+      move=> y' /reachesE /(clos_rt_rt1n Config) []. admit.
+      
+      admit. 
+    admit.
     + move=> [k [? Hk]].
-      have : In y (path K z).
-      { apply /in_map_iff. exists (k-1).  }
-      admit.
+      have /IH : In y (path K z).
+      { apply /in_map_iff. exists (k-1). }
+      move=> [L] [? HL]. exists (x::L) => /=.
+      split; first by lia.
+      move=> y' [[|k']]. { move=> [?]. by left. }
+      rewrite /= option_bind_iter Hxz => ?.
+      right. apply: HL. by exists k'.
+  - 
 Admitted.
 
 Lemma pointwise_decision K x : {bounded K x} + {not (bounded K x)}.
