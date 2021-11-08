@@ -64,7 +64,7 @@ Qed.
 End Dup.
 
 Definition reaches_plus (M: Cm2) (x y: Config) := exists k, 0 < k /\ multi_step M k x = Some y.
-Definition non_terminating (M: Cm2) x := forall k, multi_step M k x <> None.
+Definition non_terminating (M: Cm2) (x: Config) := forall k, multi_step M k x <> None.
 
 Section Facts.
 Context {M : Cm2}.
@@ -85,6 +85,12 @@ Qed.
 
 Lemma reaches_refl x : reaches x x.
 Proof. by exists 0. Qed.
+
+Lemma step_reaches {x y} : step x = Some y -> reaches x y.
+Proof. move=> ?. by exists 1. Qed.
+
+Lemma step_reaches_plus {x y} : step x = Some y -> reaches_plus x y.
+Proof. move=> ?. exists 1. split; [lia|done]. Qed.
 
 Lemma multi_step_plus {k x k' y} :
   multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
@@ -111,6 +117,12 @@ Qed.
 
 Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
 Proof. move=> [k [? Hk]]. by exists k. Qed.
+
+Lemma reaches_neq_incl {x y} : reaches x y -> x <> y -> reaches_plus x y.
+Proof.
+  move=> [[|k]]; first by move=> [->].
+  move=> ? _. exists (S k). split; [lia|done].
+Qed.
 
 Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
 Proof.
@@ -148,12 +160,20 @@ Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
 Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
 Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (multi_step_plus Hk). Qed.
 
-Lemma reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
+Lemma reaches_plus_invariant_loop (P : Config -> Prop) :
+  (forall x, P x -> exists y, reaches_plus x y /\ P y) ->
+  forall x, P x -> non_terminating x.
 Proof.
-  move=> [k [? Hk]]. elim; first done.
-  move=> k' Hk'.
-  move=> /(multi_step_k_monotone (k + k')) /(_ ltac:(lia)).
-  by rewrite (multi_step_plus Hk).
+  move=> H x Hx k. elim: k x Hx; first done.
+  move=> k IH x /H [y] [[k' [? Hk']]] /IH Hk.
+  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
+  by rewrite (multi_step_plus Hk').
+Qed.
+
+Corollary reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
+Proof.
+  move=> ?. apply: (reaches_plus_invariant_loop (fun y => y = x)); last done.
+  move=> y ->. by exists x. 
 Qed.
 
 End Facts.
