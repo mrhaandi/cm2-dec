@@ -32,6 +32,7 @@ Proof.
   move=> /IH. lia.
 Qed.
 
+(* TODO part of Coq stdlib ListDec *)
 Lemma NoDup_dec (L : list X) : {NoDup L} + {not (NoDup L)}.
 Proof.
   elim: L.
