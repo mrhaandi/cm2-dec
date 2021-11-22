@@ -378,6 +378,19 @@ Proof.
   - exists x. by split; [left|tauto].
 Qed.
 
+Lemma shift_multi_step_k_b k p a b n : 
+  multi_step k (p, (a, k)) = Some (p, (a, b)) ->
+  multi_step (n*k) (p, (a, n*k)) = Some (p, (a, n*b)).
+Proof.
+  move=> Hk. elim: n; first done.
+  move=> n IH. rewrite /= /multi_step iter_plus -/(multi_step _ _).
+  rewrite shift_multi_step_b; first by lia.
+  rewrite Hk. have ->: b + n * k = n * k + b by lia.
+  rewrite -/(multi_step _ _) shift_multi_step_b; first by lia.
+  rewrite IH. congr (Some (_, (_, _))). lia.
+Qed.
+
+
 Lemma lem2 x : l*(l+1) <= value2 x -> (bounded (l*l+1) x) + (not (uniformly_bounded M)) +
   { y | (exists k, k <= l*l /\ multi_step k x = Some y) /\ (l <= value1 y /\ l <= value2 y) }.
 Proof.
@@ -402,7 +415,9 @@ Proof.
     (map (fun oz => if oz is Some (p, (a, b)) then (p, a) else (0, 0)) (path (l * l + 1) x))
     (list_prod (seq 0 l) (seq 0 l)).
   { move=> [p a] /in_map_iff [[[p' [a' b']]|]]; first last.
-    { move=> [_ /In_pathE]. admit. (* easy *)  }
+    { move=> [_ /In_pathE].
+      move=> [?] [?] /(multi_step_k_monotone (l * l + 1)) /(_ ltac:(lia)).
+      by rewrite Hxy. }
     move=> [[-> ->]] H.
     have ? : not (l <= p).
     { move=> /nth_error_None Hp. move: H => /in_map_iff [k] [Hk /in_seq ?].
@@ -429,6 +444,7 @@ Proof.
   (* x ->>i (p, (a, b1)) ->>(j-i) (p, (a, b2)); b1 >= j-i *)
   have ? : j-i <= b1.
   { move: Hi => /multi_step_values_bound /=. lia. }
+  USE shift_multi_step_k_b
   (* TODO general lemma for not uniformly bounded becuase arbitrary long semi-loop *)
 Admitted.
 
