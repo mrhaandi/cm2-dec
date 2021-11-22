@@ -32,6 +32,17 @@ Proof.
   move=> /IH. lia.
 Qed.
 
+Lemma not_inclE (L L' : list X) : (not (incl L L')) -> { x | In x L /\ not (In x L')}.
+Proof.
+  elim: L. { move=> H. exfalso. by apply: H. }
+  move=> x L IH /=.
+  have [|?] := In_dec X_eq_dec x L'.
+  - move=> ? HxLL'. have /IH [y [? ?]] : ~ incl L L'.
+    { move=> H. apply: HxLL'. by move=> y /= [<-|/H]. }
+    exists y. tauto.
+  - move=> _. exists x. tauto.
+Qed.
+
 (* TODO part of Coq stdlib ListDec *)
 Lemma NoDup_dec (L : list X) : {NoDup L} + {not (NoDup L)}.
 Proof.
