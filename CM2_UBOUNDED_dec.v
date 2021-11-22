@@ -1,4 +1,4 @@
-Require Import List PeanoNat Lia Relation_Operators Operators_Properties.
+Require Import List ListDec PeanoNat Lia Relation_Operators Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
 Require Import M2.CM2 M2.CM2_facts.
@@ -123,6 +123,18 @@ Proof.
       rewrite path_S_last in_app_iff /=. tauto.
 Qed.
 
+Lemma mortal_bounded {K x} : multi_step K x = None -> bounded K x.
+Proof.
+  move=> HK.
+  exists (map (fun oy => if oy is Some y then y else x) (path K x)).
+  split. { by rewrite map_length path_length. }
+  move=> y [k]. have [?|?] : k < K \/ K <= k by lia.
+  - move=> Hk. apply /in_map_iff. exists (Some y).
+    split; first done.
+    rewrite -Hk. by apply: In_pathI.
+  - by move: HK => /(multi_step_k_monotone k) /(_ ltac:(lia)) ->.
+Qed.
+
 
 Lemma pointwise_decision K x : {bounded K x} + {not (bounded K x)}.
 Proof.
@@ -141,13 +153,7 @@ Proof.
         by move: Hk HK => /(multi_step_k_monotone K) /(_ ltac:(lia)) ->.
       * rewrite map_length path_length. lia.
       * apply /path_noloopI. by rewrite HK.
-  - left. exists (map (fun oy => if oy is Some y then y else x) (path K x)).
-    split. { by rewrite map_length path_length. }
-    move=> y [k]. have [?|?] : k < K \/ K <= k by lia.
-    + move=> Hk. apply /in_map_iff. exists (Some y).
-      split; first done.
-      rewrite -Hk. by apply: In_pathI.
-    + by move: HK => /(multi_step_k_monotone k) /(_ ltac:(lia)) ->.
+  - left. by apply: mortal_bounded.
 Qed.
 
 (* one way
@@ -271,12 +277,7 @@ Proof.
     move=> y /H ?. apply /in_map_iff. by exists (Some y). }
   case Hz: (multi_step K x) => [z|]; first last.
   { (* bounded by terminating path *)
-    move=> _. exists (map (fun oy => if oy is Some y then y else x) (path K x)).
-    split. { by rewrite map_length path_length. }
-    move=> y [k Hk]. have : not (K <= k).
-    { move=> ?. by move: Hz Hk => /(multi_step_k_monotone k) ->. }
-    move=> ?. apply /in_map_iff. exists (Some y). split; first done.
-    rewrite -Hk. apply: In_pathI. lia. }
+    move=> _. by apply: mortal_bounded. }
   (* not bounded *)
   move=> Hx. exfalso.
   move: x Hx Hz => [p [a b]] Hx Hz.
@@ -315,8 +316,94 @@ Proof.
   move=> H _. by apply: (H y).
 Qed.
 
+Notation l := (length M).
+(* transforms a goal (A -> B) -> C into goals A and B -> C *)
+Lemma unnest : forall (A B C : Type), A -> (B -> C) -> (A -> B) -> C.
+Proof. auto. Qed.
+
+Lemma bounded_monotone {k k' x} : k <= k' -> bounded k x -> bounded k' x.
+Proof. move=> ? [L [? ?]]. exists L. split; [lia|done]. Qed.
+
+
 Lemma uniform_decision : (uniformly_bounded M) + (not (uniformly_bounded M)).
 Proof.
+  (*
+  wlog : /(0 < l).
+  { case: (M) => [/=|? ?].
+    - move=> _. left. exists 1. move=> x.
+      exists [x]. split; first done.
+      move=> y [[|k]].
+      + move=> [<-]. by left.
+      + rewrite /CM2.multi_step /= option_bind_iter /CM2.step.
+        case: (state x); by rewrite /= iter_None.
+    - apply. move=> /=. lia. } *)
+  (* inspect large counter values *)
+  have := Forall_dec (fun p => In (multi_step l (p, (l, l))) (None :: path l (p, (l, l)))) _ (seq 0 l).
+  apply: unnest. { move=> ?. by apply: (In_dec option_Config_eq_dec). }
+  move=> [Hl|H]; first last.
+  { (* nur uniformly bounded *)
+    right => - [K HK]. apply: H. apply /Forall_forall.
+    move=> p /in_seq ?.
+    apply: Decidable.not_not.
+    { apply: In_decidable. admit. (* easy *) }
+    case Hxy: (multi_step l (p, (l, l))) => [y|/=]; last by tauto.
+    move=> /= /Decidable.not_or [_].
+    rewrite -Hxy => /path_noloopI.
+    admit. (* very hard *) }
+  (* now large configurations are uniformly bounded by l *)
+  have := Forall_dec 
+    (fun x => In (multi_step l x) (None :: path (l*l) x)) _ 
+    (list_prod (seq 0 l) (list_prod (seq 0 (l*l+1)) (seq 0 (l*l+1)))).
+  apply: unnest. { move=> ?. by apply: (In_dec option_Config_eq_dec). }
+  move=> [Hll|H]; first last.
+  { admit. (* very hard *) }
+  left.
+  exists (l*l*l*l*l+l*l+l).
+  move=> [p [a b]].
+  have [Hp|?] : l <= p \/ p < l by lia.
+  { exists [(p, (a, b))].  }
+  have [?|[?|?]] : (l <= a /\ l <= b) \/ (a < l \/ b < l) by lia.
+  - move: Hl => /Forall_forall /(_ p).
+    apply: unnest. { apply /in_seq. lia. }
+    move=> /= [/esym Hp|Hp].
+    + apply: (@bounded_monotone l); first by lia.
+      apply: mortal_bounded.
+      have ->: a = l + (a-l) by lia. have ->: b = l + (b-l) by lia.
+      rewrite shift_multi_step_a; first by lia.
+      rewrite shift_multi_step_b; first by lia.
+      by rewrite Hp.
+    + have : In (multi_step l (p, (a, b))) (path l (p, (a, b))).
+      { move: Hp => /in_map_iff [k] [Hk ?].
+        apply /in_map_iff. exists k. split; last done.
+          }
+
+      exists (map (fun oy => if oy is Some y then y else (p, (a, b))) (path (l+1) (p, (a, b)))).
+      split. { rewrite map_length path_length. nia. }
+      move=> y [k].
+      have ->: a = l + (a-l) by lia. have ->: b = l + (b-l) by lia.
+      rewrite shift_path_a shift_path_b.
+      move=> /mortal_bounded.
+    
+    move=> /esym /mortal_bounded.
+      apply.
+
+  wlog : /(l <= a \/ l )
+  
+    Search (not (_ \/ _)).
+    move=> /= /.
+move=> x y.
+rewrite /Decidable.decidable.
+    Check In_decidable.
+    Search ((_ -> False) -> False).
+    Search (not (not _)).   
+  }
+have [?|H] := fixed_decision (l*l*l*l*l+l*l+l).
+  { left. eexists. by eassumption. }
+  right. move=> [K HK]. apply: H => x.
+
+  have [L ?] := HK x.
+  move=> /(_ x) in HK.
+
 Admitted.
 
 End Construction.
