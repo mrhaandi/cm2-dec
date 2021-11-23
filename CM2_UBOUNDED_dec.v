@@ -329,6 +329,7 @@ Proof. move=> ? [L [? ?]]. exists L. split; [lia|done]. Qed.
 
 Notation l := (length M).
 
+(* from an arbitrary config arrive at config with at least one large value *)
 Lemma lem1 x : let n := l*(l+1) in
   (bounded (l*n*n+1) x) +
   { y | (exists k, k <= l*n*n /\ multi_step k x = Some y) /\ (n <= value1 y \/ n <= value2 y) }.
@@ -380,17 +381,34 @@ Qed.
 
 Lemma shift_multi_step_k_b k p a b n : 
   multi_step k (p, (a, k)) = Some (p, (a, b)) ->
-  multi_step (n*k) (p, (a, n*k)) = Some (p, (a, n*b)).
+  forall i, i <= n -> multi_step (i*k) (p, (a, n*k)) = Some (p, (a, i*b + (n-i)*k)).
 Proof.
-  move=> Hk. elim: n; first done.
-  move=> n IH. rewrite /= /multi_step iter_plus -/(multi_step _ _).
+  move=> Hk i.
+  have [b' [-> ->]] : exists b', n * k = n * k + b' /\ (n - i) * k = (n - i) * k + b'.
+  { exists 0. lia. }
+  elim: i n b'. { move=> ???. congr (Some (_, (_, _))). lia. }
+  move=> i IH [|n] b' ?; first by lia.
+  rewrite /= /multi_step iter_plus -/(multi_step _ _).
+  rewrite -?Nat.add_assoc.
   rewrite shift_multi_step_b; first by lia.
-  rewrite Hk. have ->: b + n * k = n * k + b by lia.
-  rewrite -/(multi_step _ _) shift_multi_step_b; first by lia.
-  rewrite IH. congr (Some (_, (_, _))). lia.
+  rewrite Hk. have := IH n (b+b') ltac:(lia).
+  congr eq.
+  - congr multi_step. congr (_, (_, _)). lia.
+  - congr (Some (_, (_, _))). lia.
 Qed.
 
+(* TODO MOVE *)
+Lemma NoDup_map_ext {X Y : Type} (f : X -> Y) (l : list X) :
+  (forall x1, In x1 l -> forall x2, In x2 l -> f x1 = f x2 -> x1 = x2) -> NoDup l -> NoDup (map f l).
+Proof.
+  elim: l. { move=> *. by constructor. }
+  move=> x l IH /= H /NoDup_cons_iff [Hxl] /IH {}IH. constructor.
+  - move=> /in_map_iff [x'] [/H] ? Hx'l. have ? : x' = x by tauto.
+    subst x'. exact: (Hxl Hx'l).
+  - apply: IH. move=> x1 Hx1l x2 Hx2l /H. tauto.
+Qed.
 
+(* from a config with the second large value arrive at config with two large values *)
 Lemma lem2 x : l*(l+1) <= value2 x -> (bounded (l*l+1) x) + (not (uniformly_bounded M)) +
   { y | (exists k, k <= l*l /\ multi_step k x = Some y) /\ (l <= value1 y /\ l <= value2 y) }.
 Proof.
@@ -444,10 +462,77 @@ Proof.
   (* x ->>i (p, (a, b1)) ->>(j-i) (p, (a, b2)); b1 >= j-i *)
   have ? : j-i <= b1.
   { move: Hi => /multi_step_values_bound /=. lia. }
-  USE shift_multi_step_k_b
-  (* TODO general lemma for not uniformly bounded becuase arbitrary long semi-loop *)
+  have : multi_step (j-i) (p, (a, (j-i) + (b1 - (j-i)))) = Some (p, (a, b2)).
+  { move: Hj. rewrite [in multi_step j x](ltac:(lia) : j = i + (j - i)).
+    rewrite /multi_step iter_plus -/(multi_step _ _) Hi.
+    congr eq. congr Nat.iter. congr (Some (_, (_, _))). lia. }
+  rewrite shift_multi_step_b; first by lia.
+  move Hk: (j - i) => k. case Hz: (multi_step k (p, (a, k))) => [[p' [a' b']]|]; last done.
+  move=> [???]. subst p' a' b2.
+  move: Hz => /shift_multi_step_k_b => /(_ K).
+  move: (HK (p, (a, K * k))) => [L [? HL]] H'.
+  have : incl (map (fun i => multi_step (i * k) (p, (a, K * k))) (seq 0 (K+1))) (map Some L).
+  { move=> z /in_map_iff [i'] [<- /in_seq ?]. rewrite H'; first by lia.
+    apply: in_map. apply: HL. exists (i'*k). rewrite H'; [lia|done]. }
+  move=> /(pigeonhole option_Config_eq_dec). apply.
+  { rewrite ?map_length seq_length. lia. }
+  under map_ext_in.
+  { move=> i' /in_seq ?. rewrite H'; first by lia. over. }
+  have ? : k <> b' by lia.
+  apply: NoDup_map_ext; last by apply: seq_NoDup.
+  move=> i1 /in_seq ? i2 /in_seq ? [?]. nia. (* this takes time *)
+Qed.
+
+(* similar to the end of lem2 argument, start with very large counters, make K large steps, nia *)
+Lemma lem3_aux k p a1 b1 a2 b2 :
+  (k <= b1 /\ k <= a1) -> (a1 <> a2 \/ b1 <> b2) ->
+  multi_step k (p, (a1, b1)) = Some (p, (a2, b2)) ->
+  not (uniformly_bounded M).
+Proof.
 Admitted.
 
+(* from a config with two large values decide boundedness *)
+Lemma lem3 x : l <= value1 x -> l <= value2 x -> (bounded (l+1) x) + (not (uniformly_bounded M)).
+Proof.
+  move=> ??.
+  have [|/path_noloopI Hx] :=
+    In_dec option_Config_eq_dec (multi_step (l) x) (path (l) x).
+  { move=> /loop_bounded H. left. apply: (bounded_monotone _ H). lia. }
+  case Hxy: (multi_step (l+1) x) => [y|]; first last.
+  { left. by apply: mortal_bounded. }
+  right. (* not uniformly bounded *)
+  have /(pigeonhole Nat.eq_dec) : incl
+    (map (fun oz => if oz is Some (p, (a, b)) then p else 0) (path (l + 1) x))
+    (seq 0 l).
+  { move=> p /in_map_iff [[[p' [a' b']]|]]; first last.
+    { move=> [_ /In_pathE].
+      move=> [?] [?] /(multi_step_k_monotone (l + 1)) /(_ ltac:(lia)).
+      by rewrite Hxy. }
+    move=> [->] H. apply /in_seq. suff : not (l <= p) by lia.
+    move=> /nth_error_None Hp. move: H => /in_map_iff [k] [Hk /in_seq ?].
+    have : multi_step (S k) x = None by rewrite /= Hk /step /= Hp.
+    move=> /(multi_step_k_monotone (l+1)) /(_ ltac:(lia)).
+    by rewrite Hxy. }
+  apply: unnest. { rewrite map_length ?seq_length path_length. lia. }
+  rewrite /path map_map. move=> /(dup_seq Nat.eq_dec) [[i j]].
+  move=> [+ ?].
+  case Hi: (multi_step i x) => [[p [a1 b1]]|]; first last.
+  { move: Hi => /(multi_step_k_monotone (l+1)) /(_ ltac:(lia)). by rewrite Hxy. }
+  case Hj: (multi_step j x) => [[p' [a2 b2]]|]; first last.
+  { move: Hj => /(multi_step_k_monotone (l+1)) /(_ ltac:(lia)). by rewrite Hxy. }
+  move=> ?. subst p'.
+  have : a1 <> a2 \/ b1 <> b2.
+  { suff : not (a1 = a2 /\ b1 = b2) by lia. move=> [??]. subst a2 b2.
+    move: Hx. rewrite /path.
+    have -> : l+1 = i + (S (j-i-1)) + (S (l -j)) by lia.
+    rewrite seq_app seq_app /= ?map_app /= (NoDup_count_occ option_Config_eq_dec).
+    move=> /(_ (Some (p, (a1, b1)))). have ->: i + S (j - i - 1) = j by lia.
+    rewrite Hi Hj ?count_occ_app /=. case: (option_Config_eq_dec _ _); [lia|done]. }
+  move=> /lem3_aux => /(_ (j-i) p). apply.
+  { move: Hi => /multi_step_values_bound /=. lia. }
+  move: Hj. rewrite [in multi_step j x](ltac:(lia) : j = i + (j - i)).
+  by rewrite /multi_step iter_plus -/(multi_step _ _) Hi.
+Qed.
 
 Lemma uniform_decision : (uniformly_bounded M) + (not (uniformly_bounded M)).
 Proof.
