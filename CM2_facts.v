@@ -1,4 +1,4 @@
-Require Import List Lia PeanoNat.
+Require Import List ListDec Lia PeanoNat.
 Import ListNotations.
 
 Require Import M2.CM2.
@@ -17,6 +17,16 @@ Proof. elim: k; [done | by move=> /= ? ->]. Qed.
 Lemma option_bind_iter {X : Type} (f : X -> option X) k x : 
   option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
 Proof. elim: k; [done|by move=> k /= ->]. Qed.
+
+Lemma NoDup_map_ext {X Y : Type} (f : X -> Y) (l : list X) :
+  (forall x1, In x1 l -> forall x2, In x2 l -> f x1 = f x2 -> x1 = x2) -> NoDup l -> NoDup (map f l).
+Proof.
+  elim: l. { move=> *. by constructor. }
+  move=> x l IH /= H /NoDup_cons_iff [Hxl] /IH {}IH. constructor.
+  - move=> /in_map_iff [x'] [/H] ? Hx'l. have ? : x' = x by tauto.
+    subst x'. exact: (Hxl Hx'l).
+  - apply: IH. move=> x1 Hx1l x2 Hx2l /H. tauto.
+Qed.
 
 Section Dup.
 
@@ -43,18 +53,6 @@ Proof.
   - move=> _. exists x. tauto.
 Qed.
 
-(* TODO part of Coq stdlib ListDec *)
-Lemma NoDup_dec (L : list X) : {NoDup L} + {not (NoDup L)}.
-Proof.
-  elim: L.
-  {left. by constructor. }
-  move=> x L [IH|IH].
-  - have [HxL|HxL] := In_dec X_eq_dec x L.
-    + right. move=> /NoDup_cons_iff. tauto.
-    + left. by constructor.
-  - right. by move=> /NoDup_cons_iff [_ /IH].
-Qed.
-
 (* explicit duplicates in a mapped sequence *)
 Lemma dup_seq (f : nat -> X) start len :
   not (NoDup (map f (seq start len))) ->
@@ -63,7 +61,7 @@ Proof.
   elim: len start.
   { move=> start /= H. exfalso. apply: H. by constructor. }
   move=> len IH start /=.
-  have [|] := NoDup_dec (map f (seq (S start) len)).
+  have [|] := NoDup_dec X_eq_dec (map f (seq (S start) len)).
   - move=> H1f H2f. have : In (f start) (map f (seq (S start) len)).
     { have [|] := In_dec X_eq_dec (f start) (map f (seq (S start) len)); first done.
       by move: H1f => /(@NoDup_cons X) H /H /H2f. }

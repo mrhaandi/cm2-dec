@@ -92,6 +92,9 @@ Definition mortal (M: Cm2) (k: nat) (x: Config) : Prop :=
 Definition uniformly_mortal (M: Cm2) : Prop :=
   exists k, forall x, mortal M k x.
 
+Definition CM2_REV : Cm2 -> Prop :=
+  fun M => reversible M.
+
 (* Reversible Two-counter Machine Halting Problem
    Given a reversible two-counter machine M and a configucation c, 
    does a run in M starting from c eventually terminate? *)

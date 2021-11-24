@@ -30,6 +30,14 @@ Qed.
 Check MM2_HALT_dec.
 Print Assumptions MM2_HALT_dec.
 
+(* Decidability of Reversible Two Counter Machine Halting *)
+Theorem CM2_REV_dec : decidable CM2.CM2_REV.
+Proof.
+Admitted.
+
+Check CM2_REV_dec.
+Print Assumptions CM2_REV_dec.
+
 
 (* Decidability of Reversible Two Counter Machine Halting *)
 Theorem CM2_REV_HALT_dec : decidable CM2.CM2_REV_HALT.

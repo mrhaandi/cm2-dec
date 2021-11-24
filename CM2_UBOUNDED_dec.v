@@ -63,6 +63,19 @@ Proof.
   by rewrite /= option_bind_iter Hxy.
 Qed.
 
+Lemma path_plus {k k' x} y : multi_step k x = Some y ->
+  path (k+k') x = path k x ++ path k' y.
+Proof.
+  move=> Hxy. rewrite /path seq_app map_app /=.
+  congr app.
+  have ->: seq k k' = map (fun i => k+i) (seq 0 k').
+  { elim: k'; first done.
+    move=> k' IH. have ->: S k' = k' + 1 by lia.
+    by rewrite ?seq_app IH map_app. }
+  rewrite map_map. apply: map_ext => - ?.
+  by move: Hxy => /multi_step_plus ->.
+Qed.
+
 Lemma path_S_last {k x} : path (S k) x = (path k x) ++ [multi_step k x].
 Proof. by rewrite /path seq_S map_app. Qed.
 
@@ -152,27 +165,39 @@ Proof.
   move=> /In_pathE [k' [?]] /(multi_step_k_monotone k). apply. lia.
 Qed.
 
+Lemma NoDup_not_bounded {K x y} : 
+  multi_step K x = Some y -> NoDup (path (K + 1) x) -> not (bounded K x).
+Proof.
+  move=> Hxy HK [L [? HL]].
+  apply: (pigeonhole option_Config_eq_dec (path (K+1) x) (map Some L)).
+  - move=> [z|] /in_map_iff [k] [Hk] /in_seq ?.
+    { apply /in_map_iff. exists z. split; first done.
+      apply: HL. by exists k. }
+    by move: Hk Hxy => /(multi_step_k_monotone K) /(_ ltac:(lia)) ->.
+  - rewrite map_length path_length. lia.
+  - done.
+Qed.
+
+Lemma boundedE {K x} : bounded K x ->
+  (In (multi_step K x) (path K x)) + (multi_step K x = None).
+Proof.
+  move=> HK.
+  case Hy: (multi_step K x) => [y|]; last by right.
+  have [?|] := In_dec option_Config_eq_dec (Some y) (path K x).
+  { by left. }
+  rewrite -Hy. move=> /path_noloopI /NoDup_not_bounded.
+  by move=> /(_ y Hy HK).
+Qed.
+
 Lemma pointwise_decision K x : {bounded K x} + {not (bounded K x)}.
 Proof.
   case HK: (multi_step K x) => [y|].
   - have [Hy|Hy] := In_dec option_Config_eq_dec (Some y) (path K x).
     + left. apply: loop_bounded. by rewrite HK.
-    + right. move=> [L [? HL]].
-      apply: (pigeonhole option_Config_eq_dec (path (K+1) x) (map Some L)).
-      * move=> [z|] /in_map_iff [k] [Hk] /in_seq ?.
-        { apply /in_map_iff. exists z. split; first done.
-          apply: HL. by exists k. }
-        by move: Hk HK => /(multi_step_k_monotone K) /(_ ltac:(lia)) ->.
-      * rewrite map_length path_length. lia.
-      * apply /path_noloopI. by rewrite HK.
+    + right. apply: (NoDup_not_bounded HK).
+      apply: path_noloopI. by rewrite HK.
   - left. by apply: mortal_bounded.
 Qed.
-
-(* one way
-bounded K x -> multi_step K x = Some y -> exists k', k' < K /\ multi_step k' x = Some y.
-
-K <= a -> bounded K (p, (K, b)) -> bounded K (p, (a, b))
-*)
 
 Lemma multi_step_values_bound k x y : multi_step k x = Some y ->
   value1 x <= k + value1 y /\ value1 y <= k + value1 x /\
@@ -296,16 +321,7 @@ Proof.
   (* it suffices to consider configurations up to values K  *)
   wlog: a b z /(a <= K /\ b <= K); first last.
   { move=> ? Hx Hz. suff: bounded K (p, (a, b)).
-    { move=> [L [? HL]]. 
-      apply: (pigeonhole option_Config_eq_dec _ (map Some L) _ _ Hx).
-      - move=> [{}y|].
-        + move=> /In_pathE [k [? Hk]]. apply /in_map_iff.
-          exists y. split; first done.
-          apply: HL. by exists k.
-        + move=> /in_map_iff [k'] [+ /in_seq ?].
-          move=> /(multi_step_k_monotone K) /(_ ltac:(lia)).
-          by rewrite Hz.
-      - rewrite map_length path_length. lia. }
+    { by apply: (NoDup_not_bounded Hz). }
     move: HK => /Forall_forall.
     apply. apply: in_prod; [|apply: in_prod]; apply /in_seq; lia. }
   move=> H'K.
@@ -330,7 +346,7 @@ Proof. move=> ? [L [? ?]]. exists L. split; [lia|done]. Qed.
 Notation l := (length M).
 
 (* from an arbitrary config arrive at config with at least one large value *)
-Lemma lem1 x : let n := l*(l+1) in
+Lemma uniform_decision_aux1 x : let n := l*(l+1) in
   (bounded (l*n*n+1) x) +
   { y | (exists k, k <= l*n*n /\ multi_step k x = Some y) /\ (n <= value1 y \/ n <= value2 y) }.
 Proof.
@@ -397,102 +413,151 @@ Proof.
   - congr (Some (_, (_, _))). lia.
 Qed.
 
-(* TODO MOVE *)
-Lemma NoDup_map_ext {X Y : Type} (f : X -> Y) (l : list X) :
-  (forall x1, In x1 l -> forall x2, In x2 l -> f x1 = f x2 -> x1 = x2) -> NoDup l -> NoDup (map f l).
+Lemma k_step_iter k p a1 b1 a2 b2 :
+  (k <= a1 \/ a1 = a2) -> (k <= b1 \/ b1 = b2) -> 
+  multi_step k (p, (a1, b1)) = Some (p, (a2, b2)) ->
+  let ca := if Nat.eq_dec a1 a2 then 0 else 1 in
+  let cb := if Nat.eq_dec b1 b2 then 0 else 1 in
+  forall i n a b, i <= n ->
+    multi_step (i*k) (p, (a1+ca*(a+n*a1),b1+cb*(b+n*b1))) =
+      Some (p, (a1+ca*(a+(n-i)*a1+i*a2),b1+cb*(b+(n-i)*b1+i*b2))).
 Proof.
-  elim: l. { move=> *. by constructor. }
-  move=> x l IH /= H /NoDup_cons_iff [Hxl] /IH {}IH. constructor.
-  - move=> /in_map_iff [x'] [/H] ? Hx'l. have ? : x' = x by tauto.
-    subst x'. exact: (Hxl Hx'l).
-  - apply: IH. move=> x1 Hx1l x2 Hx2l /H. tauto.
+  move=> Ha Hb Hk ca cb. elim.
+  { move=> ????. congr (Some (_, (_, _))); lia. }
+  move=> i IH [|n] a b; first by lia.
+  move=> /(iffRL (Nat.succ_le_mono _ _)) /IH {}IH.
+  rewrite /= /multi_step iter_plus -/(multi_step _ _).
+  have := IH (a2+a) (b2+b). congr eq; first last.
+  { congr (Some (_, (_, _))); lia. }
+  congr Nat.iter.
+  rewrite /ca /cb.
+  move: (Nat.eq_dec a1 a2) (Nat.eq_dec b1 b2) => [?|?] [?|?] /=.
+  - rewrite ?Nat.add_0_r Hk.
+    congr (Some (_, (_, _))); lia.
+  - rewrite shift_multi_step_b; first lia.
+    rewrite ?Nat.add_0_r Hk.
+    congr (Some (_, (_, _))); lia.
+  - rewrite shift_multi_step_a; first lia.
+    rewrite ?Nat.add_0_r Hk.
+    congr (Some (_, (_, _))); lia.
+  - rewrite shift_multi_step_a; first lia.
+    rewrite shift_multi_step_b; first lia.
+    rewrite ?Nat.add_0_r Hk.
+    congr (Some (_, (_, _))); lia.
 Qed.
 
-(* from a config with the second large value arrive at config with two large values *)
-Lemma lem2 x : l*(l+1) <= value2 x -> (bounded (l*l+1) x) + (not (uniformly_bounded M)) +
-  { y | (exists k, k <= l*l /\ multi_step k x = Some y) /\ (l <= value1 y /\ l <= value2 y) }.
+(* probably too much? *)
+Lemma not_uniformly_boundedI k p a1 b1 a2 b2 :
+  (k <= a1 \/ a1 = a2) -> (k <= b1 \/ b1 = b2) -> 
+  (a1 <> a2 \/ b1 <> b2) ->
+  multi_step k (p, (a1, b1)) = Some (p, (a2, b2)) ->
+  not (uniformly_bounded M).
 Proof.
-  move=> ?.
+  move=> /k_step_iter H /H {}H Hab /H /= + [K].
+  move=> /(_ _ K 0 0) /=.
+  move Ha: (a1 + _ * _) => a.
+  move Hb: (b1 + _ * _) => b.
+  move=> {}H /(_ (p, (a, b))) [L [? HL]].
+  have : incl (map (fun i => multi_step (i * k) (p, (a, b))) (seq 0 (K+1))) (map Some L).
+  { move=> z /in_map_iff [i] [<- /in_seq ?]. rewrite H; first by lia.
+    apply: in_map. apply: HL. exists (i*k). rewrite H; [lia|done]. }
+  move=> /(pigeonhole option_Config_eq_dec). apply.
+  { rewrite ?map_length seq_length. lia. }
+  under map_ext_in.
+  { move=> i /in_seq ?. rewrite H; first by lia. over. }
+  apply: NoDup_map_ext; last by apply: seq_NoDup.
+  move=> i1 /in_seq ? i2 /in_seq ? [].
+  move: (Nat.eq_dec a1 a2) (Nat.eq_dec b1 b2) => [?|?] [?|?] /=; nia.
+Qed.
+
+Lemma multi_step_sub {i j x y z} :
+  i <= j ->
+  multi_step i x = Some y ->
+  multi_step j x = Some z ->
+  multi_step (j-i) y = Some z.
+Proof.
+  move=> ? Hi. rewrite [in multi_step j x](ltac:(lia) : j = i + (j - i)).
+  by rewrite /multi_step iter_plus -/(multi_step _ _) Hi.
+Qed.
+
+(* from a config with the a really large value arrive at config with two large values *)
+Lemma uniform_decision_aux2 x : ({l*(l+1) <= value1 x} + {l*(l+1) <= value2 x}) ->
+  (bounded (l*l+1) x) + (not (uniformly_bounded M)) +
+    { y | (exists k, k <= l*l /\ multi_step k x = Some y) /\ (l <= value1 y /\ l <= value2 y) }.
+Proof.
+  move=> Hlx.
   have [|/path_noloopI Hx] :=
     In_dec option_Config_eq_dec (multi_step (l*l) x) (path (l*l) x).
   { move=> /loop_bounded H. left. left. apply: (bounded_monotone _ H). lia. }
   case Hxy: (multi_step (l*l+1) x) => [y|]; first last.
   { left. left. by apply: mortal_bounded. }
-  pose P oz := if oz is Some z then l <= value1 z else True.
+  pose P oz := if oz is Some z then 
+    (if Hlx then l <= value2 z else l <= value1 z) else True.
   have HP : forall x, {P x} + {not (P x)}.
-  { move=> [?|]; last by left. by apply: Compare_dec.le_dec. }
+  { move=> [? /= |]; last by left. clear P.
+    case: Hlx => ?; by apply: Compare_dec.le_dec. }
   have [|H'x] := Exists_dec P (path (l * l + 1) x) HP.
-  { move=> /(Exists_sig P HP) [[z|]] [Hz /= ?].
+  { move=> /(Exists_sig P HP) [[z|]] [Hz /= H'z].
     - right. exists z. move: Hz => /In_pathE [k [? Hk]]. split.
       + exists k. split; [lia|done].
-      + move: Hk => /multi_step_values_bound. lia.
+      + move: Hk => /multi_step_values_bound. clear P HP.
+        case: Hlx H'z => /=; lia.
     - exfalso. by move: Hz Hxy => /In_None_pathE ->. }
-  (* all value1 are smaller than l, not uniformly bounded *)
-  left. right => - [K HK].
+  (* all value1 or value2 are smaller than l, not uniformly bounded *)
+  left. right. subst P.
   have /(pigeonhole prod_nat_nat_eq_dec) : incl
-    (map (fun oz => if oz is Some (p, (a, b)) then (p, a) else (0, 0)) (path (l * l + 1) x))
+    (map (fun oz => if oz is Some (p, (a, b)) then (if Hlx then (p, b) else (p, a)) else (0, 0)) (path (l * l + 1) x))
     (list_prod (seq 0 l) (seq 0 l)).
-  { move=> [p a] /in_map_iff [[[p' [a' b']]|]]; first last.
+  { move=> [p c] /in_map_iff [[[p' [a' b']]|]]; first last.
     { move=> [_ /In_pathE].
       move=> [?] [?] /(multi_step_k_monotone (l * l + 1)) /(_ ltac:(lia)).
       by rewrite Hxy. }
-    move=> [[-> ->]] H.
-    have ? : not (l <= p).
+    move=> [+ H]. have ? : not (l <= p').
     { move=> /nth_error_None Hp. move: H => /in_map_iff [k] [Hk /in_seq ?].
       have : multi_step (S k) x = None by rewrite /= Hk /step /= Hp.
       move=> /(multi_step_k_monotone (l*l+1)) /(_ ltac:(lia)).
       by rewrite Hxy. }
-    move: H'x H => /Forall_Exists_neg /Forall_forall H /H{H} /= ?.
-    apply /in_prod; apply /in_seq; lia. }
+    case: Hlx H'x HP => /= ? H'x HP.
+    - move=> [? ?]. subst p c.
+      move: H'x H => /Forall_Exists_neg /Forall_forall H /H{H} /= ?.
+      apply /in_prod; apply /in_seq; lia.
+    - move=> [? ?]. subst p c.
+      move: H'x H => /Forall_Exists_neg /Forall_forall H /H{H} /= ?.
+      apply /in_prod; apply /in_seq; lia. }
   apply: unnest. { rewrite map_length ?prod_length ?seq_length path_length. lia. }
   rewrite /path map_map. move=> /(dup_seq prod_nat_nat_eq_dec) [[i j]].
   move=> [+ ?].
-  case Hi: (multi_step i x) => [[p [a b1]]|]; first last.
+  case Hi: (multi_step i x) => [[p [a1 b1]]|]; first last.
   { move: Hi => /(multi_step_k_monotone (l*l+1)) /(_ ltac:(lia)). by rewrite Hxy. }
-  case Hj: (multi_step j x) => [[p' [a' b2]]|]; first last.
+  case Hj: (multi_step j x) => [[p' [a2 b2]]|]; first last.
   { move: Hj => /(multi_step_k_monotone (l*l+1)) /(_ ltac:(lia)). by rewrite Hxy. }
-  move=> [? ?]. subst p' a'.
-  have ? : b1 <> b2.
-  { move=> ?. subst b2.
+  clear H'x.
+  have ? : not (p = p' /\ a1 = a2 /\ b1 = b2).
+  { move=> [? [? ?]]. subst p' a2 b2.
     move: Hx. rewrite /path.
     have -> : l*l+1 = i + (S (j-i-1)) + (S (l*l -j)) by lia.
     rewrite seq_app seq_app /= ?map_app /= (NoDup_count_occ option_Config_eq_dec).
-    move=> /(_ (Some (p, (a, b1)))). have ->: i + S (j - i - 1) = j by lia.
+    move=> /(_ (Some (p, (a1, b1)))). have ->: i + S (j - i - 1) = j by lia.
     rewrite Hi Hj ?count_occ_app /=. case: (option_Config_eq_dec _ _); [lia|done]. }
-  (* x ->>i (p, (a, b1)) ->>(j-i) (p, (a, b2)); b1 >= j-i *)
-  have ? : j-i <= b1.
-  { move: Hi => /multi_step_values_bound /=. lia. }
-  have : multi_step (j-i) (p, (a, (j-i) + (b1 - (j-i)))) = Some (p, (a, b2)).
-  { move: Hj. rewrite [in multi_step j x](ltac:(lia) : j = i + (j - i)).
-    rewrite /multi_step iter_plus -/(multi_step _ _) Hi.
-    congr eq. congr Nat.iter. congr (Some (_, (_, _))). lia. }
-  rewrite shift_multi_step_b; first by lia.
-  move Hk: (j - i) => k. case Hz: (multi_step k (p, (a, k))) => [[p' [a' b']]|]; last done.
-  move=> [???]. subst p' a' b2.
-  move: Hz => /shift_multi_step_k_b => /(_ K).
-  move: (HK (p, (a, K * k))) => [L [? HL]] H'.
-  have : incl (map (fun i => multi_step (i * k) (p, (a, K * k))) (seq 0 (K+1))) (map Some L).
-  { move=> z /in_map_iff [i'] [<- /in_seq ?]. rewrite H'; first by lia.
-    apply: in_map. apply: HL. exists (i'*k). rewrite H'; [lia|done]. }
-  move=> /(pigeonhole option_Config_eq_dec). apply.
-  { rewrite ?map_length seq_length. lia. }
-  under map_ext_in.
-  { move=> i' /in_seq ?. rewrite H'; first by lia. over. }
-  have ? : k <> b' by lia.
-  apply: NoDup_map_ext; last by apply: seq_NoDup.
-  move=> i1 /in_seq ? i2 /in_seq ? [?]. nia. (* this takes time *)
+  case: Hlx HP => /= ? HP.
+  - move=> [? ?]. subst p' b2.
+    have ? : a1 <> a2 by lia.
+    (* x ->>i (p, (a1, b1)) ->>(j-i) (p, (a2, b2)); a1 >= j-i or b1 >= j-i *)
+    have ? : j-i <= a1.
+    { move: Hi => /multi_step_values_bound /=. lia. }
+    move: Hi Hj => /multi_step_sub H /H{H} /(_ ltac:(lia)).
+    move /not_uniformly_boundedI. apply; lia.
+  - move=> [? ?]. subst p' a2.
+    have ? : b1 <> b2 by lia.
+    have ? : j-i <= b1.
+    { move: Hi => /multi_step_values_bound /=. lia. }
+    move: Hi Hj => /multi_step_sub H /H{H} /(_ ltac:(lia)).
+    move /not_uniformly_boundedI. apply; lia.
 Qed.
 
-(* similar to the end of lem2 argument, start with very large counters, make K large steps, nia *)
-Lemma lem3_aux k p a1 b1 a2 b2 :
-  (k <= b1 /\ k <= a1) -> (a1 <> a2 \/ b1 <> b2) ->
-  multi_step k (p, (a1, b1)) = Some (p, (a2, b2)) ->
-  not (uniformly_bounded M).
-Proof.
-Admitted.
 
 (* from a config with two large values decide boundedness *)
-Lemma lem3 x : l <= value1 x -> l <= value2 x -> (bounded (l+1) x) + (not (uniformly_bounded M)).
+Lemma uniform_decision_aux3 x : l <= value1 x -> l <= value2 x -> (bounded (l+1) x) + (not (uniformly_bounded M)).
 Proof.
   move=> ??.
   have [|/path_noloopI Hx] :=
@@ -521,97 +586,64 @@ Proof.
   case Hj: (multi_step j x) => [[p' [a2 b2]]|]; first last.
   { move: Hj => /(multi_step_k_monotone (l+1)) /(_ ltac:(lia)). by rewrite Hxy. }
   move=> ?. subst p'.
-  have : a1 <> a2 \/ b1 <> b2.
+  have ? : a1 <> a2 \/ b1 <> b2.
   { suff : not (a1 = a2 /\ b1 = b2) by lia. move=> [??]. subst a2 b2.
     move: Hx. rewrite /path.
     have -> : l+1 = i + (S (j-i-1)) + (S (l -j)) by lia.
     rewrite seq_app seq_app /= ?map_app /= (NoDup_count_occ option_Config_eq_dec).
     move=> /(_ (Some (p, (a1, b1)))). have ->: i + S (j - i - 1) = j by lia.
     rewrite Hi Hj ?count_occ_app /=. case: (option_Config_eq_dec _ _); [lia|done]. }
-  move=> /lem3_aux => /(_ (j-i) p). apply.
+  have ?: j - i <= a1 /\ j - i <= b1.
   { move: Hi => /multi_step_values_bound /=. lia. }
-  move: Hj. rewrite [in multi_step j x](ltac:(lia) : j = i + (j - i)).
-  by rewrite /multi_step iter_plus -/(multi_step _ _) Hi.
+  move: Hi Hj => /multi_step_sub H /H{H} /(_ ltac:(lia)).
+  move=> /not_uniformly_boundedI. apply; lia.
+Qed.
+
+Lemma uniformly_bounded_empty : uniformly_bounded [].
+Proof.
+  exists 1. move=> x. exists [x]. split; first done.
+  move=> y [[|k]].
+  - move=> [<-]. by left.
+  - rewrite /= option_bind_iter /CM2.step.
+    by case: (state x); rewrite /= iter_None.
+Qed.
+
+Lemma reaches_bounded {K k x y} : multi_step k x = Some y -> bounded K y -> bounded (k+K) x.
+Proof.
+  move=> Hxy /boundedE [HK|HK].
+  - apply: loop_bounded.
+    move: Hxy (Hxy) => /path_plus -> /multi_step_plus ->.
+    apply /in_app_iff. by right.
+  - apply: mortal_bounded.
+    by move: Hxy => /multi_step_plus ->.
 Qed.
 
 Lemma uniform_decision : (uniformly_bounded M) + (not (uniformly_bounded M)).
 Proof.
-  (*
-  wlog : /(0 < l).
-  { case: (M) => [/=|? ?].
-    - move=> _. left. exists 1. move=> x.
-      exists [x]. split; first done.
-      move=> y [[|k]].
-      + move=> [<-]. by left.
-      + rewrite /CM2.multi_step /= option_bind_iter /CM2.step.
-        case: (state x); by rewrite /= iter_None.
-    - apply. move=> /=. lia. } *)
-  (* inspect large counter values *)
-  have := Forall_dec (fun p => In (multi_step l (p, (l, l))) (None :: path l (p, (l, l)))) _ (seq 0 l).
-  apply: unnest. { move=> ?. by apply: (In_dec option_Config_eq_dec). }
-  move=> [Hl|H]; first last.
-  { (* nur uniformly bounded *)
-    right => - [K HK]. apply: H. apply /Forall_forall.
-    move=> p /in_seq ?.
-    apply: Decidable.not_not.
-    { apply: In_decidable. admit. (* easy *) }
-    case Hxy: (multi_step l (p, (l, l))) => [y|/=]; last by tauto.
-    move=> /= /Decidable.not_or [_].
-    rewrite -Hxy => /path_noloopI.
-    admit. (* very hard *) }
-  (* now large configurations are uniformly bounded by l *)
-  have := Forall_dec 
-    (fun x => In (multi_step l x) (None :: path (l*l) x)) _ 
-    (list_prod (seq 0 l) (list_prod (seq 0 (l*l+1)) (seq 0 (l*l+1)))).
-  apply: unnest. { move=> ?. by apply: (In_dec option_Config_eq_dec). }
-  move=> [Hll|H]; first last.
-  { admit. (* very hard *) }
-  left.
-  exists (l*l*l*l*l+l*l+l).
-  move=> [p [a b]].
-  have [Hp|?] : l <= p \/ p < l by lia.
-  { exists [(p, (a, b))].  }
-  have [?|[?|?]] : (l <= a /\ l <= b) \/ (a < l \/ b < l) by lia.
-  - move: Hl => /Forall_forall /(_ p).
-    apply: unnest. { apply /in_seq. lia. }
-    move=> /= [/esym Hp|Hp].
-    + apply: (@bounded_monotone l); first by lia.
-      apply: mortal_bounded.
-      have ->: a = l + (a-l) by lia. have ->: b = l + (b-l) by lia.
-      rewrite shift_multi_step_a; first by lia.
-      rewrite shift_multi_step_b; first by lia.
-      by rewrite Hp.
-    + have : In (multi_step l (p, (a, b))) (path l (p, (a, b))).
-      { move: Hp => /in_map_iff [k] [Hk ?].
-        apply /in_map_iff. exists k. split; last done.
-          }
-
-      exists (map (fun oy => if oy is Some y then y else (p, (a, b))) (path (l+1) (p, (a, b)))).
-      split. { rewrite map_length path_length. nia. }
-      move=> y [k].
-      have ->: a = l + (a-l) by lia. have ->: b = l + (b-l) by lia.
-      rewrite shift_path_a shift_path_b.
-      move=> /mortal_bounded.
-    
-    move=> /esym /mortal_bounded.
-      apply.
-
-  wlog : /(l <= a \/ l )
-  
-    Search (not (_ \/ _)).
-    move=> /= /.
-move=> x y.
-rewrite /Decidable.decidable.
-    Check In_decidable.
-    Search ((_ -> False) -> False).
-    Search (not (not _)).   
-  }
-have [?|H] := fixed_decision (l*l*l*l*l+l*l+l).
-  { left. eexists. by eassumption. }
-  right. move=> [K HK]. apply: H => x.
-
-  have [L ?] := HK x.
-  move=> /(_ x) in HK.
+  wlog ? : /(l > 0).
+  { move: (M) => [|? ?] /=.
+    - move=> _. left. by apply: uniformly_bounded_empty.
+    - apply. lia. }
+  pose K := (l+1)*(l+1)*(l+1)*(l+1)*(l+1).
+  (* test uniform boundedness by K ~ l^5 *)
+  have [?|HK] := fixed_decision K. { left. by exists K. }
+  right. move=> HM. apply: HK => x.
+  (* x ->> y with at least one large counter *)
+  have [|[y [[k1 [Hk1 Hxy]] ?]]] := uniform_decision_aux1 x.
+  { apply: bounded_monotone. lia. }
+  have -> : K = k1 + (K - k1) by lia.
+  apply: (reaches_bounded Hxy).
+  have : {l * (l + 1) <= value1 y} + {l * (l + 1) <= value2 y}.
+  { case H: (l * (l + 1) - value1 y) => [|?]; [left|right]; lia. }
+  move=> /uniform_decision_aux2 [[|]|[z]].
+  - apply: bounded_monotone. lia.
+  - by move=> /(_ HM).
+  - move=> [[k2 [? Hyz]]] [/uniform_decision_aux3 H /H{H}].
+    move=> [/bounded_monotone Hz|].
+    + have -> : K - k1 = k2 + (K - k1 - k2) by lia.
+      apply: (reaches_bounded Hyz). apply: Hz. lia.
+    + by move=> /(_ HM).
+Qed.
 
 End Construction.
 
