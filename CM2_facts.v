@@ -5,6 +5,10 @@ Require Import M2.CM2.
 
 Require Import ssreflect ssrbool ssrfun.
 
+(* transforms a goal (A -> B) -> C into goals A and B -> C *)
+Lemma unnest : forall (A B C : Type), A -> (B -> C) -> (A -> B) -> C.
+Proof. auto. Qed.
+
 Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
 Proof.
   elim: m; first by rewrite Nat.add_0_r.
@@ -27,6 +31,15 @@ Proof.
     subst x'. exact: (Hxl Hx'l).
   - apply: IH. move=> x1 Hx1l x2 Hx2l /H. tauto.
 Qed.
+
+Lemma Config_eq_dec (x y : Config) : {x = y} + {x <> y}.
+Proof. by do ? decide equality. Qed.
+
+Lemma option_Config_eq_dec (x y : option Config) : {x = y} + {x <> y}.
+Proof. by do ? decide equality. Qed.
+
+Lemma prod_nat_nat_eq_dec (x y : nat * nat) : {x = y} + {x <> y}.
+Proof. by do ? decide equality. Qed.
 
 Section Dup.
 
@@ -53,22 +66,47 @@ Proof.
   - move=> _. exists x. tauto.
 Qed.
 
+Lemma not_NoDup_consE {x} {l: list X} : (not (NoDup (x :: l))) -> In x l \/ not (NoDup l).
+Proof.
+  have [?|?] := In_dec X_eq_dec x l.
+  { move=> ?. by left. }
+  move=> Hxl. right => Hl. apply: Hxl.
+  by constructor.
+Qed.
+
+Lemma not_NoDupE {l : list X} : not (NoDup l) -> 
+  exists '(i, j), i < j < length l /\ nth_error l i = nth_error l j.
+Proof.
+  elim: l. { move=> H. exfalso. apply: H. by constructor. }
+  move=> x l IH.
+  move=> /not_NoDup_consE [|].
+  - move=> /(@In_nth_error X) [j] Hj.
+    have ? : not (length l <= j).
+    { move=> /nth_error_None. by rewrite Hj. }
+    exists (0, S j) => /=. split; [lia|done].
+  - move=> /IH [[i j]] [? ?].
+    exists (S i, S j) => /=. split; [lia|done].
+Qed.
+
+Lemma nth_error_seq {i start len} :
+  i < len -> nth_error (seq start len) i = Some (start + i).
+Proof.
+  elim: len i start; first by lia.
+  move=> len IH [|i] start.
+  { move=> ?. congr Some. lia. }
+  move=> ?. rewrite /= IH; first by lia.
+  congr Some. lia.
+Qed.
+
 (* explicit duplicates in a mapped sequence *)
 Lemma dup_seq (f : nat -> X) start len :
   not (NoDup (map f (seq start len))) ->
   exists '(i, j), f i = f j /\ (start <= i /\ i < j /\ j < start+len).
 Proof.
-  elim: len start.
-  { move=> start /= H. exfalso. apply: H. by constructor. }
-  move=> len IH start /=.
-  have [|] := NoDup_dec X_eq_dec (map f (seq (S start) len)).
-  - move=> H1f H2f. have : In (f start) (map f (seq (S start) len)).
-    { have [|] := In_dec X_eq_dec (f start) (map f (seq (S start) len)); first done.
-      by move: H1f => /(@NoDup_cons X) H /H /H2f. }
-    move=> /in_map_iff [j] [?] /in_seq ?. exists (start, j).
-    split; first done. lia.
-  - move=> /IH [[i j]] [? ?] _.
-    exists (i, j). split; first done. lia.
+  move=> /not_NoDupE [[i j]]. rewrite map_length seq_length.
+  move=> [? H]. exists (start+i, start+j). split; last lia.
+  move: H. rewrite ?nth_error_map ?nth_error_seq; [lia|lia|].
+  by move=> [].
 Qed.
 
 End Dup.

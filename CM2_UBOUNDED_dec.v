@@ -17,15 +17,6 @@ Definition path k x := map (fun n => multi_step n x) (seq 0 k).
 Lemma path_length {k x} : length (path k x) = k.
 Proof. by rewrite /path map_length seq_length. Qed.
 
-Lemma Config_eq_dec (x y : Config) : {x = y} + {x <> y}.
-Proof. by do ? decide equality. Qed.
-
-Lemma option_Config_eq_dec (x y : option Config) : {x = y} + {x <> y}.
-Proof. by do ? decide equality. Qed.
-
-Lemma prod_nat_nat_eq_dec (x y : nat * nat) : {x = y} + {x <> y}.
-Proof. by do ? decide equality. Qed.
-
 Lemma In_pathE K x oy : In oy (path K x) -> exists k, k < K /\ multi_step k x = oy.
 Proof.
   move=> /in_map_iff [k] [<-] /in_seq ?.
@@ -213,16 +204,6 @@ Proof.
     + case Hx: (value1 x) => [|?] /IH /=; lia.
 Qed.
 
-Lemma nth_error_seq {i start len} :
-  i < len -> nth_error (seq start len) i = Some (start + i).
-Proof.
-  elim: len i start; first by lia.
-  move=> len IH [|i] start.
-  { move=> ?. congr Some. lia. }
-  move=> ?. rewrite /= IH; first by lia.
-  congr Some. lia.
-Qed.
-
 Lemma shift_multi_step_a k K p a b :
   k <= K ->
   multi_step k (p, (K + a, b)) =
@@ -379,11 +360,6 @@ Proof.
     move=> /(multi_step_k_monotone (l*n*n+1)) /(_ ltac:(lia)).
     by rewrite Hxy.
 Qed.
-
-(* transforms a goal (A -> B) -> C into goals A and B -> C *)
-Lemma unnest : forall (A B C : Type), A -> (B -> C) -> (A -> B) -> C.
-Proof. auto. Qed.
-
 
 Lemma Exists_sig {X : Type} P (HP : (forall x, {P x} + {~ P x})) (L : list X) :
   Exists P L -> { x | In x L /\ P x}.
