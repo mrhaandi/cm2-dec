@@ -30,16 +30,11 @@ Lemma shift_steps_a k K p a b :
   | None => None
   end.
 Proof.
-  elim: k K p a b; first done.
-  move=> k IH [|K] p a b ?; first by lia.
-  rewrite /steps /= ?obind_oiter /step -/step /=.
-  case: (nth_error M p); last by rewrite ?oiter_None.
-  case.
-  - move=> c. rewrite -IH; first by lia.
-    congr steps. congr (_, (_, _)). lia.
-  - move=> [] q.
-    + case: b => [|b]; rewrite -IH; by [|lia].
-    + rewrite -IH; by [|lia].
+  move=> ?. rewrite [LHS]shift_steps [in RHS]shift_steps.
+  have ->: Nat.min k (K + a) = k by lia.
+  have ->: Nat.min k K = k by lia.
+  case: (steps k _) => [[? [? ?]]|]; last done.
+  congr (Some (_, (_, _))); lia.
 Qed.
 
 Lemma shift_steps_b k K p a b :
@@ -50,16 +45,11 @@ Lemma shift_steps_b k K p a b :
   | None => None
   end.
 Proof.
-  elim: k K p a b; first done.
-  move=> k IH [|K] p a b ?; first by lia.
-  rewrite /steps /= ?obind_oiter /step -/step /=.
-  case: (nth_error M p); last by rewrite ?oiter_None.
-  case.
-  - move=> c. rewrite -IH; first by lia.
-    congr steps. congr (_, (_, _)). lia.
-  - move=> [] q.
-    + rewrite -IH; by [|lia].
-    + case: a => [|a]; rewrite -IH; by [|lia].
+  move=> ?. rewrite [LHS]shift_steps [in RHS]shift_steps.
+  have ->: Nat.min k (K + b) = k by lia.
+  have ->: Nat.min k K = k by lia.
+  case: (steps k _) => [[? [? ?]]|]; last done.
+  congr (Some (_, (_, _))); lia.
 Qed.
 
 Lemma shift_path_a K p a b :

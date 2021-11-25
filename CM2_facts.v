@@ -188,6 +188,50 @@ Qed.
 Lemma bounded_monotone {k k' x} : k <= k' -> bounded k x -> bounded k' x.
 Proof. move=> ? [L [? ?]]. exists L. split; [lia|done]. Qed.
 
+Arguments Nat.min !n !m /.
+
+Lemma shift_steps k p a b :
+  steps k (p, (a, b)) =
+  match steps k (p, (Nat.min k a, Nat.min k b)) with
+  | Some (p', (a', b')) => Some (p', (a' + (a - k), b' + (b - k)))
+  | None => None
+  end.
+Proof.
+  set x := (p, (a, b)).
+  have ->: p = state x by done.
+  have ->: a = value1 x by done.
+  have ->: b = value2 x by done.
+  elim: k (x); clear x p a b.
+  { move=> [p [a b]] /=. congr (Some (_, (_, _))); lia. }
+  move=> k IH [p [a b]].
+  rewrite /steps /= ?obind_oiter /step -/step /=.
+  case: (nth_error M p); last by rewrite ?oiter_None.
+  case.
+  - move=> c. rewrite -?/(steps _ _).
+    rewrite [in LHS]IH [in RHS]IH /=.
+    set oy1 := (steps k _).
+    set oy2 := (steps k _).
+    have <- : oy1 = oy2.
+    { congr (steps k (_, (_, _))); move: (a) (b) (c) => [|?] [|?] [|] /=; lia. }
+    case: (oy1) => [[? [? ?]]|]; last done.
+    congr (Some (_, (_, _))); move: (a) (b) (c) => [|?] [|?] [|]; lia.
+  - move=> c q. rewrite -?/(steps _ _).
+    rewrite [in LHS]IH [in RHS]IH /=.
+    set oy1 := (steps k _).
+    set oy2 := (steps k _).
+    have <- : oy1 = oy2.
+    { congr (steps k (_, (_, _))); move: (a) (b) (c) => [|?] [|?] [|] /=; lia. }
+    case: (oy1) => [[? [? ?]]|]; last done.
+    congr (Some (_, (_, _))); move: (k) (a) (b) (c) => [|?] [|?] [|?] [|] /=; lia.
+Qed.
+
+Lemma mortal_K_bound K p a b :
+  mortal K (p, (a, b)) <-> mortal K (p, (Nat.min K a, Nat.min K b)).
+Proof.
+  rewrite /mortal (shift_steps K p a b).
+  by case: (steps K (p, (Nat.min K a, Nat.min K b))) => [[? [? ?]]|].
+Qed.
+
 (* path notion *)
 
 Lemma path_length {k x} : length (path k x) = k.
@@ -336,4 +380,13 @@ Proof.
   - apply: mortal_bounded.
     by move: Hxy => /steps_plus ->.
 Qed.
+
+Lemma bounded_mortal_bound {K k x} : bounded K x -> mortal k x -> mortal K x.
+Proof.
+  rewrite /mortal => /boundedE + Hk.
+  case; last done.
+  move=> /path_loopE /(_ k).
+  by rewrite Hk => /In_None_pathE.
+Qed.
+
 End Facts.

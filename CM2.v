@@ -50,16 +50,17 @@ Definition step (M: Cm2) (x: Config) : option Config :=
   | Some (inc b) => (* increase counter, goto next state*)
     Some (1 + (state x), ((if b then 0 else 1) + (value1 x), (if b then 1 else 0) + (value2 x)))
   | Some (dec b y) => (* decrease counter, if successful goto state y *)
-    if b then 
-      match value2 x with
-      | 0 => Some (1 + (state x), (value1 x, 0))
-      | S n => Some (y, (value1 x, n))
-      end
-    else
-      match value1 x with
-      | 0 => Some (1 + (state x), (0, value2 x))
-      | S n => Some (y, (n, value2 x))
-      end
+    Some (
+      if b then 
+        match value2 x with
+        | 0 => (1 + (state x), (value1 x, 0))
+        | S n => (y, (value1 x, n))
+        end
+      else
+        match value1 x with
+        | 0 => (1 + (state x), (0, value2 x))
+        | S n => (y, (n, value2 x))
+        end)
   end.
 
 (* iterated partial two-counter machine step function *)
