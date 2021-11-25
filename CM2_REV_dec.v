@@ -10,7 +10,7 @@ Variable M : Cm2.
 Notation step := (CM2.step M).
 Notation l := (length M).
 
-Lemma decision : (reversible M) + (not (reversible M)).
+Theorem decision : (reversible M) + (not (reversible M)).
 Proof.
   pose t := list_prod (seq 0 l) (list_prod [0;1;2] [0;1;2]).
   have Ht : forall p1 a1 b1 p2 a2 b2,
@@ -81,69 +81,46 @@ Proof.
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
     + move: c1 a1 b1 c2 a2 b2 H' => [] => [a1 [|b1]|[|a1] b1].
       all: move=> [] => [a2 [|b2]|[|a2] b2] ?.
-      * move=> + + [? ?]. lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 0)), (p2, (0, 1))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      all: move=> Hp1 Hp2 [] *; subst.
+      * lia.
+      * exists ((p1, (0, 0)), (p2, (0, 1))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst p2. by move=> ->.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 0)), (p2, (1, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * by move: Hp1 Hp2 => ->.
+      * exists ((p1, (0, 0)), (p2, (1, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 1)), (p2, (0, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (0, 1)), (p2, (0, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 1)), (p2, (0, 1))). split.
-        { apply: Ht; lia. }
-        split; first by (case; lia).
+      * exists ((p1, (0, 1)), (p2, (0, 1))).
+        split; [apply: Ht; lia|split; first by (case; lia)].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 1)), (p2, (0, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (0, 1)), (p2, (0, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 1)), (p2, (1, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (0, 1)), (p2, (1, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst. by move=> ->.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 0)), (p2, (0, 1))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * by move: Hp1 Hp2 => ->.
+      * exists ((p1, (0, 0)), (p2, (0, 1))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [??]. lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (0, 0)), (p2, (1, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * lia.
+      * exists ((p1, (0, 0)), (p2, (1, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (1, 0)), (p2, (0, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (1, 0)), (p2, (0, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (1, 0)), (p2, (0, 1))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (1, 0)), (p2, (0, 1))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (1, 0)), (p2, (0, 0))). split.
-        { apply: Ht; lia. }
-        split; first done.
+      * exists ((p1, (1, 0)), (p2, (0, 0))).
+        split; [apply: Ht; lia|split; first done].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
-      * move=> + + [???]. subst.
-        exists ((p1, (1, 0)), (p2, (1, 0))). split.
-        { apply: Ht; lia. }
-        split; first by (case; lia).
+      * exists ((p1, (1, 0)), (p2, (1, 0))).
+        split; [apply: Ht; lia|split; first by (case; lia)].
         rewrite /step Hp1 Hp2 /=. congr (Some (_, (_, _))); lia.
 Qed.
 

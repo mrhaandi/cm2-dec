@@ -18,10 +18,28 @@ Arguments measure_ind {X}.
 Lemma prod_nat_nat_eq_dec (x y : nat * nat) : {x = y} + {x <> y}.
 Proof. by do ? decide equality. Qed.
 
+Lemma eq_or_inf {X: Type} : (forall (x y: X), {x = y} + {x <> y}) ->
+  forall (x y: X) P, (x = y) \/ P -> (x = y) + P.
+Proof.
+  move=> H x y P. case: (H x y).
+  - move=> ??. by left.
+  - move=> ??. right. tauto.
+Qed.
+
 Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
 Proof.
   elim: m; first by rewrite Nat.add_0_r.
   move=> m /= <-. by have ->: n + S m = S n + m by lia.
+Qed.
+
+Lemma Exists_sig {X : Type} P (HP : (forall x, {P x} + {~ P x})) (L : list X) :
+  Exists P L -> { x | In x L /\ P x}.
+Proof.
+  elim: L. { by move=> /Exists_nil. }
+  move=> x L IH /Exists_cons H.
+  have [/IH|?] := Exists_dec P L HP.
+  - move=> [y [? ?]]. exists y. by split; [right|].
+  - exists x. by split; [left|tauto].
 Qed.
 
 Lemma list_sum_map_le {X: Type} f g (L: list X) :

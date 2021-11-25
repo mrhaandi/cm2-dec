@@ -3,20 +3,6 @@ Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
 Require Import M2.Facts M2.CM2 M2.CM2_facts.
 
-Lemma eq_or_inf {X: Type} : (forall (x y: X), {x = y} + {x <> y}) ->
-  forall (x y: X) P, (x = y) \/ P -> (x = y) + P.
-Proof.
-  move=> H x y P. case: (H x y).
-  - move=> ??. by left.
-  - move=> ??. right. tauto.
-Qed.
-
-Lemma config_eta (x : Config) : x = (state x, (value1 x, value2 x)).
-Proof. by move: x => [? [? ?]]. Qed.
-
-Definition oiter {X : Type} (f : X -> option X) (n : nat) (x : X) :=
-  Nat.iter n (obind f) (Some x).
-
 (* an avid instruction may jump to a valid state (except the first) *)
 Inductive avid (l : nat) : Instruction -> Prop :=
   | avidI p b : S p < l -> avid l (dec b (S p)).
@@ -64,7 +50,8 @@ Definition step' (x: Config) : option Config :=
       if value1 x is 0 then Some (1 + (state x), (0, value2 x)) else None
   end.
 
-Definition steps' : nat -> Config -> option Config := oiter step'.
+Definition steps' n x : option Config :=
+  Nat.iter n (obind step') (Some x).
 
 Notation step := (CM2.step M).
 Notation steps := (CM2.steps M).
@@ -152,39 +139,6 @@ Proof.
     all: by move=> [/(f_equal state)] /= <-.
 Qed.
 
-(*
-(* for a reversible machine for each configuration one can compute
-   the number of steps until the first jump to 0 *)
-Lemma steps'I x : 
-  { k & { y | steps' k x = Some y /\ 
-    (if step y is Some z then state z = 0 \/ length M <= state z else True) } }.
-Proof.
-Admitted.
-
-  move Hn: (length M - state x) => n. elim: n x Hn.
-  { move=> x ?. exists 0, x. split; first done.
-    rewrite /step. by have /nth_error_None -> : (length M <= state x) by lia. }
-  move=> n IH x ?. case Hy: (step' x) => [y|].
-  - move: (Hy) => /step'_inc_state ?.
-    have /IH : (length M - state y = n) by lia.
-    move=> [k] [z] [? ?]. exists (1+k), z.
-    split; last done.
-    by rewrite /steps' iter_plus /= Hy.
-  - exists 0, x. split; first done.
-    move: (reversible_not_avid) Hy => /Forall_forall.
-    (* ad hoc, possibly externalize *)
-    clear -HM. rewrite /step' /step. case Hi: (nth_error M (state x)) => [i|] H; last done.
-    move: Hi => /nth_error_In /H {H}.
-    move: i => []; first done.
-    move=> [] q H.
-    + move: (value2 x) => [|? ? /=]; first done.
-      suff: not (q = S (q - 1) /\ S (q - 1) < length M) by lia.
-      by move=> [+] /avidI => <-.
-    + move: (value1 x) => [|? ? /=]; first done.
-      suff: not (q = S (q - 1) /\ S (q - 1) < length M) by lia.
-      by move=> [+] /avidI => <-.
-Qed.
-*)
 Corollary reaches'I x : 
   { y | reaches' x y /\ 
     (if step y is Some z then state z = 0 \/ length M <= state z else True) }.
@@ -197,7 +151,7 @@ Proof.
     have /IH : (length M - state y = n) by lia.
     move=> [z] [Hyz ?]. exists z. split; last done.
     move: Hyz => [k Hk]. exists (1+k).
-    by rewrite /steps' /oiter iter_plus /= Hy.
+    by rewrite /steps' iter_plus /= Hy.
   - exists x. split; first by exists 0.
     move: (reversible_not_avid) Hy => /Forall_forall.
     (* ad hoc, possibly externalize *)
@@ -239,7 +193,6 @@ Proof.
       eexists. split; [reflexivity|move=> /=; lia].
 Qed.
 
-
 (* if (1, 1) f->>t-> (0, 1 + m), then (a, b) t->> (0, a * m + b) *)
 Lemma dec_a_0 x m : reaches' (0, (1, 1)) x -> 
   step x = Some (0, (0, 1 + m)) ->
@@ -261,7 +214,6 @@ Proof.
       * move: (value1 x) Hax => [|ax]; first by lia.
         move=> ? [? ? ?] /=. congr (Some (_, (_, _))); lia.
 Qed.
-
 
 (* if (1, 1) f->>t-> (1 + n, 0), then (a, b) t->> (b * n + a, 0) *)
 Lemma dec_b_0 x n : reaches' (0, (1, 1)) x -> 
@@ -285,42 +237,6 @@ Proof.
         rewrite Hbx. move=> ? []. by lia.
 Qed.
 
-(*
-(* EXPERIMENT WITH step conditions
-Lemma asd2 x y : step x = Some y -> value2 y < value2 x ->
-  value1 x = value1 y /\ value2 x = S (value2 y) /\ 
-  forall a b, step (state x, (a, S b)) = Some (0, (a, b)).
-Admitted.
-
-(* if (1, 1) f->>t-> (1 + n, 0), then (a, b) t->> (b * n + a, 0) *)
-Lemma dec_b_0 k x n : steps' k (0, (1, 1)) = Some x -> 
-  step x = Some (0, (1 + n, 0)) ->
-  forall a b, exists k', steps k' (0, (a, b)) = Some (0, (b * n + a, 0)).
-Proof.
-  move=> H1x H2x a b. elim: b a.
-  - move=> a. by exists 0.
-  - move=> b IH a. move: H1x => /steps'E.
-    move=> [n'] [m'] /= [Hax] [Hbx] /(_ a (S b) ltac:(lia) ltac:(lia)).
-    move=> /steps'_incl Hk.
-    have [k' {}IH] := IH (n + a). exists (k + (1 + k')).
-    move: Hk => /steps_plus ->.
-    have ->: n + b * n + a = b * n + (n + a) by lia.
-    rewrite <- IH. apply: steps_plus.
-    move: H2x => /asd2 /= /(_ ltac:(lia)) [?] [?] ->.
-    congr Some. congr pair. congr pair; lia.
-(*
-    move: H2x. rewrite /= /step. case: (nth_error M (state x)); last done.
-    move=> [].
-    + move=> c [] /= -> ??. congr Some. congr pair. congr pair; lia.
-    + move=> [] q.
-      * move: (value2 x) Hbx => [|bx]; first by lia.
-        move=> ? [? ? ?] /=. subst. have ->: m' = 0 by lia.
-        congr Some. congr pair. congr pair; lia.
-      * move: (value1 x) Hax => [|ax]; first by lia.
-        rewrite Hbx. move=> ? []. by lia.*)
-Qed.
-*)
-*)
 (* if (1, 0) f->>t-> (0, 0), then (a, 0) t->> (0, 0) *)
 Lemma dec_a_0' x : reaches' (0, (1, 0)) x -> 
   step x = Some (0, (0, 0)) ->
@@ -335,7 +251,6 @@ Proof.
   apply: (reaches_trans H). subst pz.
   move: IH. congr reaches. congr (_, (_, _)); lia.
 Qed.
-
 
 (* if (0, 1) f->>t-> (0, 0), then (0, b) t->> (0, 0) *)
 Lemma dec_b_0' x : reaches' (0, (0, 1)) x -> 
@@ -381,20 +296,6 @@ Proof.
     move=> /steps_plus ->. by apply: IH.
 Qed.
 
-(*
-(* x f->> HALT (without jumps) *)
-Lemma steps'_None_terminating k x y :
-  steps' k x = Some y -> step y = None ->
-  forall a b, (a > 0 -> value1 x > 0) -> (b > 0 -> value2 x > 0) -> 
-    terminating (state x, (a, b)).
-Proof.
-  move=> Hx /step_None Hy a b ? ?. exists (k+1).
-  move: Hx => /steps'E [n] [m] /= [?] [?].
-  move=> /(_ a b ltac:(lia) ltac:(lia)) /steps'_incl.
-  move=> /steps_plus ->. by apply /step_None.
-Qed.
-*)
-
 Lemma reaches'_None_terminating x y :
   reaches' x y -> step y = None ->
   forall a b, (a > 0 -> value1 x > 0) -> (b > 0 -> value2 x > 0) -> 
@@ -406,22 +307,6 @@ Proof.
   move=> /reaches_terminating. apply.
   exists 1. by apply /step_None.
 Qed.
-
-(*
-(* x f->>t-> HALT (with exactly one jump) *)
-Lemma steps'_Some_terminating k x y z :
-  steps' k x = Some y -> step y = Some z -> length M <= state z ->
-  forall a b, (value1 x > 0 <-> a > 0) -> (value2 x > 0 <-> b > 0) -> 
-    terminating (state x, (a, b)).
-Proof.
-  move=> Hx Hy Hz a b ? ?. exists (2+k).
-  move: Hx => /steps'E [n] [m] /= [?] [?].
-  move=> /(_ a b ltac:(lia) ltac:(lia)) /steps'_incl ->.
-  move: Hy => /(step_parallel (state y, (a + n, b + m))) /= /(_ ltac:(lia)).
-  move=> [[pz [az bz]]] [->] /= [<-] ?.
-  by apply /step_None /nth_error_None.
-Qed.
-*)
 
 Lemma reaches'_Some_terminating x y z :
   reaches' x y -> step y = Some z -> length M <= state z ->
@@ -483,7 +368,6 @@ Proof.
   move: (H') => [/H] {}H /H [ax'] [bx'] [? ?].
   exists (0, (ax', bx')). split; [done|lia].
 Qed.
-
 
 (* not (1, 1) f->>t-> (0, 0) *)
 Lemma not_transition_1_1_to_0_0 x : reaches' (0, (1, 1)) x -> step x <> Some (0, (0, 0)).
@@ -607,21 +491,21 @@ Proof.
   move: a'y b'y Ha'y Hb'y => [|a'y] [|b'y] H1y H2y.
   - (* case: (1, 1) f->>t-> (0, 0) impossible *)
     move: Hx H'x => /not_transition_1_1_to_0_0.
-    by rewrite (config_eta y) H0y H1y H2y.
+    by rewrite (Config_eta y) H0y H1y H2y.
   - (* case: (1, 1) f->>t-> (0, S b') uniform transition to (0, Sb') *)
     do 1 left. right. move=> a.
     move: Hx' => /reaches'E [n] [m] /= [?] [?].
     move=> /(_ (S a) 0 ltac:(lia) ltac:(lia)) /reaches'_incl Hk'.
     move: H'x' => /(step_parallel (state x', (S a + n, m))) /=.
     move=> /(_ ltac:(lia)) [y'] [/step_reaches Hy'] [H0y'] ?.
-    move: Hx H'x => /dec_a_0 H. rewrite (config_eta y) H0y H1y H2y.
+    move: Hx H'x => /dec_a_0 H. rewrite (Config_eta y) H0y H1y H2y.
     move=> /H {H} => /(_ a (S by')) Hk''.
     exists (a * b'y + by').
     apply /(reaches_trans Hk') /(reaches_trans Hy').
-    rewrite (config_eta y').
+    rewrite (Config_eta y').
     move: Hk''. congr reaches; congr (_, (_, _)); lia.
   - (* case: (1, 1) f->>t-> (S a', 0) loop or uniform transition to (0, 0) *)
-    move: Hx H'x. rewrite (config_eta y) H0y H1y H2y.
+    move: Hx H'x. rewrite (Config_eta y) H0y H1y H2y.
     move=> /dec_b_0 H /H {H}. move: a'y {H1y} => [|a'y] H.
     + (* uniform transition to (0, 0) *)
       do 2 left. right.
@@ -646,7 +530,7 @@ Proof.
       by apply /(reaches_reaches_plus Hk') /(reaches_plus_reaches Hz) /H.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
     do 3 left. right. move=> a. apply: dec_loop; [eassumption|].
-    by rewrite H'x (config_eta y) H0y H1y H2y.
+    by rewrite H'x (Config_eta y) H0y H1y H2y.
 Qed.
 
 (* uniform transition from equivalence class (0, S b) *)
@@ -723,9 +607,9 @@ Proof.
   move: a'y b'y Ha'y Hb'y => [|a'y] [|b'y] H1y H2y.
   - (* case: (1, 1) f->>t-> (0, 0) impossible *)
     move: Hx H'x => /not_transition_1_1_to_0_0.
-    by rewrite (config_eta y) H0y H1y H2y.
+    by rewrite (Config_eta y) H0y H1y H2y.
   - (* case: (1, 1) f->>t-> (0, S b') loop or uniform transition to (0, 0) *)
-    move: Hx H'x. rewrite (config_eta y) H0y H1y H2y.
+    move: Hx H'x. rewrite (Config_eta y) H0y H1y H2y.
     move=> /dec_a_0 H /H {H}. move: b'y {H2y} => [|b'y] H.
     + (* uniform transition to (0, 0) *)
       do 2 left. right.
@@ -754,15 +638,15 @@ Proof.
     move=> /(_ 0 (S b) ltac:(lia) ltac:(lia)) /reaches'_incl Hk'.
     move: H'x' => /(step_parallel (state x', (n, S b + m))) /=.
     move=> /(_ ltac:(lia)) [y'] [/step_reaches Hy'] [H0y'] ?.
-    move: Hx H'x => /dec_b_0 H. rewrite (config_eta y) H0y H1y H2y.
+    move: Hx H'x => /dec_b_0 H. rewrite (Config_eta y) H0y H1y H2y.
     move=> /H {H} => /(_ (S ay') b) Hk''.
     exists (b * a'y + ay').
     apply /(reaches_trans Hk') /(reaches_trans Hy').
-    rewrite (config_eta y').
+    rewrite (Config_eta y').
     move: Hk''. congr reaches; congr (_, (_, _)); lia.
   - (* case: (1, 1) f->>t-> (S a', S b') loop *)
     do 3 left. right. move=> b. apply: dec_loop; [eassumption|].
-    by rewrite H'x (config_eta y) H0y H1y H2y.
+    by rewrite H'x (Config_eta y) H0y H1y H2y.
 Qed.
 
 (* uniform transition from equivalence class (S a, S b) *)
@@ -804,7 +688,6 @@ Proof.
     do 3 left. right. move=> a b. apply: dec_loop; by eassumption.
 Qed.
 
-(* equivalence class business *)
 
 (* equivalence classes (0, 0), (S a, 0), (0, S b), (S a, S b) *)
 Definition RZ '(a, b) '(a', b') : Prop := (a > 0 <-> a' > 0) /\ (b > 0 <-> b' > 0).
@@ -819,15 +702,6 @@ Proof.
   - exists (1, 0) => /=. split; [tauto|lia].
   - exists (1, 1) => /=. split; [tauto|lia].
 Qed.
-
-(*
-Lemma steps_act k x y :
-  steps k x = Some y -> x <> y -> steps (S (k - 1)) x = Some y.
-Proof.
-  case: k => [|k] /=; first by congruence.
-  by rewrite Nat.sub_0_r.
-Qed.
-*)
 
 Lemma uniform_transition ab :
   In ab representatives -> 
@@ -908,7 +782,6 @@ Qed.
 
 Opaque representatives.
 
-
 Lemma RZ_loop v : 
   (forall ab, RZ v ab ->
     exists a'b', RZ v a'b' /\ reaches_plus (0, ab) (0, a'b')) ->
@@ -965,7 +838,7 @@ Proof.
   move=> /uniform_representative_decision [] => H /H; tauto.
 Qed.
 
-Lemma uniform_decision (c: Config) : (terminating c) + (non_terminating c).
+Theorem decision (c: Config) : (terminating c) + (non_terminating c).
 Proof.
   have [y [/reaches'_incl Hk]] := reaches'I c.
   case Hz: (step y) => [[pz [az bz]]|] /=; first last.
@@ -990,7 +863,7 @@ End Construction.
 
 (* decision procedure for the halting problem for reversible Cm2 *)
 Definition decider (M: Cm2) (HM: reversible M) (c: Config) : bool :=
-  match uniform_decision M HM c with
+  match decision M HM c with
   | inl _ => true
   | inr _ => false
   end.
@@ -999,7 +872,7 @@ Definition decider (M: Cm2) (HM: reversible M) (c: Config) : bool :=
 Lemma decider_spec (M: Cm2) (HM: reversible M) (c: Config) :
   (terminating M c) <-> (decider M HM c = true).
 Proof.
-  rewrite /decider. case: (uniform_decision M HM c).
+  rewrite /decider. case: (decision M HM c).
   - tauto.
   - move=> H. split; [by move=> [k /H] | done].
 Qed.

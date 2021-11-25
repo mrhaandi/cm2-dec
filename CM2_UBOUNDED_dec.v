@@ -11,7 +11,6 @@ Notation bounded := (CM2.bounded M).
 Notation step := (CM2.step M).
 Notation reaches := (CM2.reaches M).
 
-
 Definition path k x := map (fun n => steps n x) (seq 0 k).
 
 Lemma path_length {k x} : length (path k x) = k.
@@ -27,24 +26,6 @@ Lemma In_pathI k x K : k < K -> In (steps k x) (path K x).
 Proof.
   move=> ?. apply /in_map_iff. exists k. split; first done.
   apply /in_seq. lia.
-Qed.
-
-Lemma reachesE x y : reaches x y -> clos_refl_trans Config (fun x' y' => step x' = Some y') x y.
-Proof.
-  move=> [k]. elim: k x.
-  { move=> x [] <-. by apply: rt_refl. }
-  move=> k IH x. rewrite /= obind_oiter.
-  case Hxz: (step x) => [z|]; last by rewrite oiter_None.
-  move=> /IH ?. apply: rt_trans; last by eassumption.
-  by apply: rt_step.
-Qed.
-
-Lemma reachesI x y : clos_refl_trans Config (fun x' y' => step x' = Some y') x y -> reaches x y.
-Proof.
-  elim.
-  - move=> ???. by exists 1.
-  - move=> ?. by exists 0.
-  - move=> ??? _ ? _ ?. apply: reaches_trans; by eassumption.
 Qed.
 
 Lemma path_S {k x} y : step x = Some y -> path (S k) x = (Some x) :: (path k y).
@@ -70,16 +51,6 @@ Qed.
 Lemma path_S_last {k x} : path (S k) x = (path k x) ++ [steps k x].
 Proof. by rewrite /path seq_S map_app. Qed.
 
-Lemma steps_loop_mod {K x k} : steps (S K) x = Some x ->
-  steps k x = steps (k mod (S K)) x.
-Proof.
-  rewrite [in steps k x](Nat.div_mod_eq k (S K)).
-  move: (k mod (S K)) => k' Hx. elim: (k / S K).
-  - congr steps. lia.
-  - move=> n IH. have ->: S K * S n + k' = S K + (S K * n + k') by lia.
-    by move: Hx => /steps_plus ->.
-Qed.
-
 Lemma path_loopE K x : In (steps K x) (path K x) -> 
   forall k, In (steps k x) (path K x).
 Proof.
@@ -99,7 +70,6 @@ Proof.
     + move: (Hk) => /(steps_k_monotone k') /(_ Hkk') ->.
       rewrite -Hk. apply: In_pathI. lia.
 Qed.
-
 
 Lemma path_loopE' K x : In (steps K x) (path K x) -> 
   forall y, reaches x y -> In (Some y) (path K x).
@@ -190,20 +160,6 @@ Proof.
   - left. by apply: mortal_bounded.
 Qed.
 
-Lemma steps_values_bound k x y : steps k x = Some y ->
-  value1 x <= k + value1 y /\ value1 y <= k + value1 x /\
-  value2 x <= k + value2 y /\ value2 y <= k + value2 x.
-Proof.
-  elim: k x. { move=> ? [<-]. lia. }
-  move=> k IH x. rewrite /= obind_oiter /step -/step.
-  case: (nth_error M (state x)); last by rewrite oiter_None.
-  case.
-  - move=> [] /IH /=; lia.
-  - move=> [] ?.
-    + case Hx: (value2 x) => [|?] /IH /=; lia.
-    + case Hx: (value1 x) => [|?] /IH /=; lia.
-Qed.
-
 Lemma shift_steps_a k K p a b :
   k <= K ->
   steps k (p, (K + a, b)) =
@@ -271,7 +227,6 @@ Proof.
   move=> ?. have ->: b = K+(b-K) by lia.
   rewrite shift_path_b. by apply: NoDup_map_inv.
 Qed.
-
 
 Lemma fixed_decision K :
   {forall x : Config, bounded K x} + {~ (forall x : Config, bounded K x)}.
@@ -361,16 +316,6 @@ Proof.
     by rewrite Hxy.
 Qed.
 
-Lemma Exists_sig {X : Type} P (HP : (forall x, {P x} + {~ P x})) (L : list X) :
-  Exists P L -> { x | In x L /\ P x}.
-Proof.
-  elim: L. { by move=> /Exists_nil. }
-  move=> x L IH /Exists_cons H.
-  have [/IH|?] := Exists_dec P L HP.
-  - move=> [y [? ?]]. exists y. by split; [right|].
-  - exists x. by split; [left|tauto].
-Qed.
-
 Lemma shift_steps_k_b k p a b n : 
   steps k (p, (a, k)) = Some (p, (a, b)) ->
   forall i, i <= n -> steps (i*k) (p, (a, n*k)) = Some (p, (a, i*b + (n-i)*k)).
@@ -444,16 +389,6 @@ Proof.
   apply: NoDup_map_ext; last by apply: seq_NoDup.
   move=> i1 /in_seq ? i2 /in_seq ? [].
   move: (Nat.eq_dec a1 a2) (Nat.eq_dec b1 b2) => [?|?] [?|?] /=; nia.
-Qed.
-
-Lemma steps_sub {i j x y z} :
-  i <= j ->
-  steps i x = Some y ->
-  steps j x = Some z ->
-  steps (j-i) y = Some z.
-Proof.
-  move=> ? Hi. rewrite [in steps j x](ltac:(lia) : j = i + (j - i)).
-  by rewrite /steps iter_plus -/(steps _ _) Hi.
 Qed.
 
 (* from a config with the a really large value arrive at config with two large values *)
@@ -531,7 +466,6 @@ Proof.
     move /not_uniformly_boundedI. apply; lia.
 Qed.
 
-
 (* from a config with two large values decide boundedness *)
 Lemma uniform_decision_aux3 x : l <= value1 x -> l <= value2 x -> (bounded (l+1) x) + (not (uniformly_bounded M)).
 Proof.
@@ -594,7 +528,8 @@ Proof.
     by move: Hxy => /steps_plus ->.
 Qed.
 
-Lemma uniform_decision : (uniformly_bounded M) + (not (uniformly_bounded M)).
+(* informative decision statement for uniform boundedness for Cm2 *)
+Theorem decision : (uniformly_bounded M) + (not (uniformly_bounded M)).
 Proof.
   wlog ? : /(l > 0).
   { move: (M) => [|? ?] /=.
@@ -622,12 +557,6 @@ Proof.
 Qed.
 
 End Construction.
-
-(* informative decision statement for uniform boundedness for Cm2 *)
-Theorem decision (M: Cm2) : (uniformly_bounded M) + (not (uniformly_bounded M)).
-Proof.
-  exact: (uniform_decision M).
-Qed.
 
 (* boolean decision procedure for uniform boundedness for Cm2 *)
 Definition decider (M: Cm2) : bool :=

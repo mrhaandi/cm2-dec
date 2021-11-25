@@ -64,7 +64,6 @@ Qed.
 Check CM2_UBOUNDED_dec.
 Print Assumptions CM2_UBOUNDED_dec.
 
-
 (* Decidability ofTwo-counter Machine Uniform Mortality *)
 Theorem CM2_UMORTAL_dec : decidable CM2.CM2_UMORTAL.
 Proof.

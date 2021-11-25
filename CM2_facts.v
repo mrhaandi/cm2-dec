@@ -1,9 +1,12 @@
-Require Import List ListDec Lia PeanoNat.
+Require Import List ListDec Lia PeanoNat Relation_Operators.
 Import ListNotations.
 
 Require Import M2.Facts M2.CM2.
 
 Require Import ssreflect ssrbool ssrfun.
+
+Lemma Config_eta (x : Config) : x = (state x, (value1 x, value2 x)).
+Proof. by move: x => [? [? ?]]. Qed.
 
 Lemma Config_eq_dec (x y : Config) : {x = y} + {x <> y}.
 Proof. by do ? decide equality. Qed.
@@ -43,6 +46,16 @@ Proof. move=> ?. exists 1. split; [lia|done]. Qed.
 Lemma steps_plus {k x k' y} :
   steps k x = Some y -> steps (k + k') x = steps k' y.
 Proof. rewrite /steps iter_plus. by move=> ->. Qed.
+
+Lemma steps_sub {i j x y z} :
+  i <= j ->
+  steps i x = Some y ->
+  steps j x = Some z ->
+  steps (j-i) y = Some z.
+Proof.
+  move=> ? Hi. rewrite [in steps j x](ltac:(lia) : j = i + (j - i)).
+  by rewrite /steps iter_plus -/(steps _ _) Hi.
+Qed.
 
 Lemma step_None x : step x = None <-> nth_error M (state x) = None.
 Proof.
@@ -108,6 +121,25 @@ Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
 Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
 Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (steps_plus Hk). Qed.
 
+(* TODO above using relations *)
+Lemma reachesE x y : reaches x y -> clos_refl_trans Config (fun x' y' => step x' = Some y') x y.
+Proof.
+  move=> [k]. elim: k x.
+  { move=> x [] <-. by apply: rt_refl. }
+  move=> k IH x. rewrite /= obind_oiter.
+  case Hxz: (step x) => [z|]; last by rewrite oiter_None.
+  move=> /IH ?. apply: rt_trans; last by eassumption.
+  by apply: rt_step.
+Qed.
+
+Lemma reachesI x y : clos_refl_trans Config (fun x' y' => step x' = Some y') x y -> reaches x y.
+Proof.
+  elim.
+  - move=> ???. by exists 1.
+  - move=> ?. by exists 0.
+  - move=> ??? _ ? _ ?. apply: reaches_trans; by eassumption.
+Qed.
+
 Lemma reaches_plus_invariant_loop (P : Config -> Prop) :
   (forall x, P x -> exists y, reaches_plus x y /\ P y) ->
   forall x, P x -> non_terminating x.
@@ -122,6 +154,30 @@ Corollary reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
 Proof.
   move=> ?. apply: (reaches_plus_invariant_loop (fun y => y = x)); last done.
   move=> y ->. by exists x. 
+Qed.
+
+Lemma steps_loop_mod {K x k} : steps (S K) x = Some x ->
+  steps k x = steps (k mod (S K)) x.
+Proof.
+  rewrite [in steps k x](Nat.div_mod_eq k (S K)).
+  move: (k mod (S K)) => k' Hx. elim: (k / S K).
+  - congr steps. lia.
+  - move=> n IH. have ->: S K * S n + k' = S K + (S K * n + k') by lia.
+    by move: Hx => /steps_plus ->.
+Qed.
+
+Lemma steps_values_bound k x y : steps k x = Some y ->
+  value1 x <= k + value1 y /\ value1 y <= k + value1 x /\
+  value2 x <= k + value2 y /\ value2 y <= k + value2 x.
+Proof.
+  elim: k x. { move=> ? [<-]. lia. }
+  move=> k IH x. rewrite /= obind_oiter /step -/step.
+  case: (nth_error M (state x)); last by rewrite oiter_None.
+  case.
+  - move=> [] /IH /=; lia.
+  - move=> [] ?.
+    + case Hx: (value2 x) => [|?] /IH /=; lia.
+    + case Hx: (value1 x) => [|?] /IH /=; lia.
 Qed.
 
 End Facts.
