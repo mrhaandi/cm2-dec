@@ -111,20 +111,20 @@ Qed.
 
 End Dup.
 
-Definition reaches_plus (M: Cm2) (x y: Config) := exists k, 0 < k /\ multi_step M k x = Some y.
-Definition non_terminating (M: Cm2) (x: Config) := forall k, multi_step M k x <> None.
+Definition reaches_plus (M: Cm2) (x y: Config) := exists k, 0 < k /\ steps M k x = Some y.
+Definition non_terminating (M: Cm2) (x: Config) := forall k, steps M k x <> None.
 
 Section Facts.
 Context {M : Cm2}.
 
 Notation step := (CM2.step M).
-Notation multi_step := (CM2.multi_step M).
+Notation steps := (CM2.steps M).
 Notation reaches := (CM2.reaches M).
 Notation reaches_plus := (reaches_plus M).
 Notation terminating := (CM2.terminating M).
 Notation non_terminating := (non_terminating M).
 
-Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
+Lemma steps_k_monotone {k x} k' : steps k x = None -> k <= k' -> steps k' x = None.
 Proof.
   move=> + ?. have ->: k' = (k' - k) + k by lia.
   elim: (k' - k); first done.
@@ -140,9 +140,9 @@ Proof. move=> ?. by exists 1. Qed.
 Lemma step_reaches_plus {x y} : step x = Some y -> reaches_plus x y.
 Proof. move=> ?. exists 1. split; [lia|done]. Qed.
 
-Lemma multi_step_plus {k x k' y} :
-  multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
-Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
+Lemma steps_plus {k x k' y} :
+  steps k x = Some y -> steps (k + k') x = steps k' y.
+Proof. rewrite /steps iter_plus. by move=> ->. Qed.
 
 Lemma step_None x : step x = None <-> nth_error M (state x) = None.
 Proof.
@@ -154,13 +154,13 @@ Qed.
 Lemma reaches_plus_reaches {x y z} : reaches_plus x y -> reaches y z -> reaches_plus x z.
 Proof.
   move=> [k [? Hk]] [k' Hk']. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
 Lemma reaches_reaches_plus {x y z} : reaches x y -> reaches_plus y z -> reaches_plus x z.
 Proof.
   move=> [k Hk] [k' [? Hk']]. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
 Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
@@ -175,22 +175,22 @@ Qed.
 Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
 Proof.
   move=> [k Hk] [k' Hk']. exists (k+k').
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
 Lemma reaches_non_terminating {x y} : reaches x y -> non_terminating y -> non_terminating x.
 Proof.
   move=> [k Hk] Hy k'.
   have [|->] : k' <= k \/ k' = k + (k' - k) by lia.
-  - by move: Hk => + /multi_step_k_monotone H /H => ->.
-  - rewrite (multi_step_plus Hk). by apply: Hy.
+  - by move: Hk => + /steps_k_monotone H /H => ->.
+  - rewrite (steps_plus Hk). by apply: Hy.
 Qed.
 
 Lemma reaches_non_terminating' {x y} : reaches x y -> non_terminating x -> non_terminating y.
 Proof.
   move=> [k' Hk'] Hx k Hk.
   apply: (Hx (k' + k)).
-  by rewrite (multi_step_plus Hk').
+  by rewrite (steps_plus Hk').
 Qed.
 
 Lemma reaches_plus_state_bound {x y} : reaches_plus x y -> state x < length M.
@@ -206,7 +206,7 @@ Lemma reaches_plus_trans {x y z} : reaches_plus x y -> reaches_plus y z -> reach
 Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
 
 Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
-Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (multi_step_plus Hk). Qed.
+Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (steps_plus Hk). Qed.
 
 Lemma reaches_plus_invariant_loop (P : Config -> Prop) :
   (forall x, P x -> exists y, reaches_plus x y /\ P y) ->
@@ -214,8 +214,8 @@ Lemma reaches_plus_invariant_loop (P : Config -> Prop) :
 Proof.
   move=> H x Hx k. elim: k x Hx; first done.
   move=> k IH x /H [y] [[k' [? Hk']]] /IH Hk.
-  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
-  by rewrite (multi_step_plus Hk').
+  move=> /(steps_k_monotone (k' + k)) /(_ ltac:(lia)).
+  by rewrite (steps_plus Hk').
 Qed.
 
 Corollary reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.

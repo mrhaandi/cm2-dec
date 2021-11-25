@@ -64,16 +64,16 @@ Definition step' (x: Config) : option Config :=
       if value1 x is 0 then Some (1 + (state x), (0, value2 x)) else None
   end.
 
-Definition multi_step' : nat -> Config -> option Config := oiter step'.
+Definition steps' : nat -> Config -> option Config := oiter step'.
 
 Notation step := (CM2.step M).
-Notation multi_step := (CM2.multi_step M).
+Notation steps := (CM2.steps M).
 Notation terminating := (CM2.terminating M).
 Notation non_terminating := (CM2_facts.non_terminating M).
 Notation reaches := (CM2.reaches M).
 Notation reaches_plus := (CM2_facts.reaches_plus M).
 
-Definition reaches' x y := exists k, multi_step' k x = Some y.
+Definition reaches' x y := exists k, steps' k x = Some y.
 
 (* step includes step' *)
 Lemma step'_incl x y : step' x = Some y -> step x = Some y.
@@ -83,33 +83,33 @@ Proof.
   move=> [] q; [by case: (value2 x)|by case: (value1 x)].
 Qed.
 
-(* multi_step includes multi_step' *)
-Lemma multi_step'_incl k x y : multi_step' k x = Some y -> multi_step k x = Some y.
+(* steps includes steps' *)
+Lemma steps'_incl k x y : steps' k x = Some y -> steps k x = Some y.
 Proof.
   elim: k y; first done.
-  move=> k /=. case: (multi_step' k x) => [y|]; last done.
+  move=> k /=. case: (steps' k x) => [y|]; last done.
   move=> /(_ y erefl) -> /=. by apply: step'_incl.
 Qed.
 
 Corollary reaches'_incl {x y} : reaches' x y -> reaches x y.
-Proof. move=> [k /multi_step'_incl ?]. by exists k. Qed.
+Proof. move=> [k /steps'_incl ?]. by exists k. Qed.
 
 Opaque nth_error.
 Arguments nth_error_In {_ _ _ _}.
 
 (* key lemma on the way to ensure that equivalent configurations behave identically
-   every multi_step' computation without jumps increases the starting configuration
+   every steps' computation without jumps increases the starting configuration
    (a > 0 -> value1 x > 0), (b > 0 -> value2 x > 0) in the same way *)
-Lemma multi_step'E k x y : multi_step' k x = Some y ->
+Lemma steps'E k x y : steps' k x = Some y ->
   exists n m, value1 y = value1 x + n /\ value2 y = value2 x + m /\ 
     forall a b, (a > 0 -> value1 x > 0) -> (b > 0 -> value2 x > 0) ->
-      multi_step' k (state x, (a, b)) = Some (state y, (a + n, b + m)).
+      steps' k (state x, (a, b)) = Some (state y, (a + n, b + m)).
 Proof.
   elim: k x y.
   { move=> x y [<-]. exists 0, 0. do 2 (split; first by lia).
     move=> a b ?? /=. by rewrite ?Nat.add_0_r. }
   move=> k IH x y /=.
-  case Hx': (multi_step' k x) => [x'|]; last done.
+  case Hx': (steps' k x) => [x'|]; last done.
   move: Hx' => /IH [n] [m] [Hax'] [Hbx'] {}IH /=.
   rewrite /(step' x'). case Hi: (nth_error M (state x')) => [i|]; last done.
   move: i Hi => [].
@@ -137,7 +137,7 @@ Corollary reaches'E x y : reaches' x y ->
     forall a b, (a > 0 -> value1 x > 0) -> (b > 0 -> value2 x > 0) ->
       reaches' (state x, (a, b)) (state y, (a + n, b + m)).
 Proof.
-  move=> [k] /multi_step'E [n] [m] [?] [?] H.
+  move=> [k] /steps'E [n] [m] [?] [?] H.
   exists n, m. split; [done|split; [done|]].
   move=> ????. exists k. by apply: H.
 Qed.
@@ -155,8 +155,8 @@ Qed.
 (*
 (* for a reversible machine for each configuration one can compute
    the number of steps until the first jump to 0 *)
-Lemma multi_step'I x : 
-  { k & { y | multi_step' k x = Some y /\ 
+Lemma steps'I x : 
+  { k & { y | steps' k x = Some y /\ 
     (if step y is Some z then state z = 0 \/ length M <= state z else True) } }.
 Proof.
 Admitted.
@@ -169,7 +169,7 @@ Admitted.
     have /IH : (length M - state y = n) by lia.
     move=> [k] [z] [? ?]. exists (1+k), z.
     split; last done.
-    by rewrite /multi_step' iter_plus /= Hy.
+    by rewrite /steps' iter_plus /= Hy.
   - exists 0, x. split; first done.
     move: (reversible_not_avid) Hy => /Forall_forall.
     (* ad hoc, possibly externalize *)
@@ -197,7 +197,7 @@ Proof.
     have /IH : (length M - state y = n) by lia.
     move=> [z] [Hyz ?]. exists z. split; last done.
     move: Hyz => [k Hk]. exists (1+k).
-    by rewrite /multi_step' /oiter iter_plus /= Hy.
+    by rewrite /steps' /oiter iter_plus /= Hy.
   - exists x. split; first by exists 0.
     move: (reversible_not_avid) Hy => /Forall_forall.
     (* ad hoc, possibly externalize *)
@@ -293,19 +293,19 @@ Lemma asd2 x y : step x = Some y -> value2 y < value2 x ->
 Admitted.
 
 (* if (1, 1) f->>t-> (1 + n, 0), then (a, b) t->> (b * n + a, 0) *)
-Lemma dec_b_0 k x n : multi_step' k (0, (1, 1)) = Some x -> 
+Lemma dec_b_0 k x n : steps' k (0, (1, 1)) = Some x -> 
   step x = Some (0, (1 + n, 0)) ->
-  forall a b, exists k', multi_step k' (0, (a, b)) = Some (0, (b * n + a, 0)).
+  forall a b, exists k', steps k' (0, (a, b)) = Some (0, (b * n + a, 0)).
 Proof.
   move=> H1x H2x a b. elim: b a.
   - move=> a. by exists 0.
-  - move=> b IH a. move: H1x => /multi_step'E.
+  - move=> b IH a. move: H1x => /steps'E.
     move=> [n'] [m'] /= [Hax] [Hbx] /(_ a (S b) ltac:(lia) ltac:(lia)).
-    move=> /multi_step'_incl Hk.
+    move=> /steps'_incl Hk.
     have [k' {}IH] := IH (n + a). exists (k + (1 + k')).
-    move: Hk => /multi_step_plus ->.
+    move: Hk => /steps_plus ->.
     have ->: n + b * n + a = b * n + (n + a) by lia.
-    rewrite <- IH. apply: multi_step_plus.
+    rewrite <- IH. apply: steps_plus.
     move: H2x => /asd2 /= /(_ ltac:(lia)) [?] [?] ->.
     congr Some. congr pair. congr pair; lia.
 (*
@@ -357,14 +357,14 @@ Lemma dec_loop x n m : reaches' (0, (1, 1)) x ->
   step x = Some (0, (1 + n, 1 + m)) ->
   forall a b, non_terminating (0, (a, b)).
 Proof.
-  move=> [k Hk] Hx a b k' /(multi_step_k_monotone (k' * S k)) /(_ ltac:(lia)).
+  move=> [k Hk] Hx a b k' /(steps_k_monotone (k' * S k)) /(_ ltac:(lia)).
   elim: k' a b; first done.
   move=> k' IH a b. have ->: S k' * S k = (k + 1) + (k' * S k) by lia.
-  have : multi_step (k + 1) (0, (a, b)) = Some (0, (n + a, b + m)).
+  have : steps (k + 1) (0, (a, b)) = Some (0, (n + a, b + m)).
   {
-    move: Hk => /multi_step'E [n'] [m'] /= [Hax] [Hbx].
+    move: Hk => /steps'E [n'] [m'] /= [Hax] [Hbx].
     move=> /(_ a b ltac:(lia) ltac:(lia)).
-    move=> /multi_step'_incl /multi_step_plus ->.
+    move=> /steps'_incl /steps_plus ->.
     move: Hx. rewrite /= /step. case: (nth_error M (state x)); last done.
     move=> [].
     - move=> c [] /= -> ??. congr (Some (_, (_, _))); lia.
@@ -378,20 +378,20 @@ Proof.
         have ->: a + n' = S (n + a) by lia.
         congr (Some (_, (_, _))); lia.
     }
-    move=> /multi_step_plus ->. by apply: IH.
+    move=> /steps_plus ->. by apply: IH.
 Qed.
 
 (*
 (* x f->> HALT (without jumps) *)
-Lemma multi_step'_None_terminating k x y :
-  multi_step' k x = Some y -> step y = None ->
+Lemma steps'_None_terminating k x y :
+  steps' k x = Some y -> step y = None ->
   forall a b, (a > 0 -> value1 x > 0) -> (b > 0 -> value2 x > 0) -> 
     terminating (state x, (a, b)).
 Proof.
   move=> Hx /step_None Hy a b ? ?. exists (k+1).
-  move: Hx => /multi_step'E [n] [m] /= [?] [?].
-  move=> /(_ a b ltac:(lia) ltac:(lia)) /multi_step'_incl.
-  move=> /multi_step_plus ->. by apply /step_None.
+  move: Hx => /steps'E [n] [m] /= [?] [?].
+  move=> /(_ a b ltac:(lia) ltac:(lia)) /steps'_incl.
+  move=> /steps_plus ->. by apply /step_None.
 Qed.
 *)
 
@@ -409,14 +409,14 @@ Qed.
 
 (*
 (* x f->>t-> HALT (with exactly one jump) *)
-Lemma multi_step'_Some_terminating k x y z :
-  multi_step' k x = Some y -> step y = Some z -> length M <= state z ->
+Lemma steps'_Some_terminating k x y z :
+  steps' k x = Some y -> step y = Some z -> length M <= state z ->
   forall a b, (value1 x > 0 <-> a > 0) -> (value2 x > 0 <-> b > 0) -> 
     terminating (state x, (a, b)).
 Proof.
   move=> Hx Hy Hz a b ? ?. exists (2+k).
-  move: Hx => /multi_step'E [n] [m] /= [?] [?].
-  move=> /(_ a b ltac:(lia) ltac:(lia)) /multi_step'_incl ->.
+  move: Hx => /steps'E [n] [m] /= [?] [?].
+  move=> /(_ a b ltac:(lia) ltac:(lia)) /steps'_incl ->.
   move: Hy => /(step_parallel (state y, (a + n, b + m))) /= /(_ ltac:(lia)).
   move=> [[pz [az bz]]] [->] /= [<-] ?.
   by apply /step_None /nth_error_None.
@@ -821,8 +821,8 @@ Proof.
 Qed.
 
 (*
-Lemma multi_step_act k x y :
-  multi_step k x = Some y -> x <> y -> multi_step (S (k - 1)) x = Some y.
+Lemma steps_act k x y :
+  steps k x = Some y -> x <> y -> steps (S (k - 1)) x = Some y.
 Proof.
   case: k => [|k] /=; first by congruence.
   by rewrite Nat.sub_0_r.
@@ -916,8 +916,8 @@ Lemma RZ_loop v :
 Proof.
   move=> Hv ab Hab k. elim: k ab Hab; first done.
   move=> k IH ab /Hv [a'b'] [/IH] Hk [k' [? Hk']].
-  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
-  move: Hk' => /multi_step_plus ->. by apply: Hk.
+  move=> /(steps_k_monotone (k' + k)) /(_ ltac:(lia)).
+  move: Hk' => /steps_plus ->. by apply: Hk.
 Qed.
 
 Lemma uniform_representative_decision v :

@@ -66,16 +66,16 @@ Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option
   match oX with None => None | Some x => f x end.
 
 (* iterated partial two-counter machine step function *)
-Definition multi_step (M: Cm2) (k: nat) (x: Config) : option Config :=
+Definition steps (M: Cm2) (k: nat) (x: Config) : option Config :=
   Nat.iter k (option_bind (step M)) (Some x).
 
 (* two-counter machine configuration reachability *)
 Definition reaches (M: Cm2) (x y: Config) :=
-  exists k, multi_step M k x = Some y.
+  exists k, steps M k x = Some y.
 
 (* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Cm2) (x: Config) :=
-  exists k, multi_step M k x = None.
+  exists k, steps M k x = None.
 
 (* injectivity of the step function *)
 Definition reversible (M : Cm2) : Prop := 
@@ -92,7 +92,7 @@ Definition uniformly_bounded (M: Cm2) : Prop :=
 
 (* k bounds the number of steps in a terminating run from x *)
 Definition mortal (M: Cm2) (k: nat) (x: Config) : Prop := 
-  multi_step M k x = None.
+  steps M k x = None.
 
 (* uniform bound for number of steps until termination *)
 Definition uniformly_mortal (M: Cm2) : Prop :=

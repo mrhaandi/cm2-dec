@@ -51,18 +51,18 @@ Section Construction.
 Variable M : Mm2.
 
 Notation step := (MM2.step M).
-Notation multi_step := (MM2.multi_step M).
+Notation steps := (MM2.steps M).
 Notation terminating := (MM2.terminating M).
 Notation l := (length M).
 
 (* after k steps values change at most by k (or are reset and at most k) *)
-Lemma multi_step_bound {k p a b p' a' b'} : multi_step k (p, (a, b)) = Some (p', (a', b')) -> 
+Lemma steps_bound {k p a b p' a' b'} : steps k (p, (a, b)) = Some (p', (a', b')) -> 
   a' <= k + a /\ b' <= k + b /\ (a' <= k \/ a <= k + a') /\ (b' <= k \/ b <= k + b').
 Proof.
   elim: k p' a' b'.
   { move=> p' a' b' /= []. lia. }
   move=> k + p' a' b' /=.
-  case: (multi_step k (p, (a, b))) => [[p'' [a'' b'']]|]; last done.
+  case: (steps k (p, (a, b))) => [[p'' [a'' b'']]|]; last done.
   move=> /(_ p'' a'' b'' ltac:(done)) IH.
   rewrite /= /(step _).
   case: (nth_error M (state (p'', (a'', b'')))); last done.
@@ -75,20 +75,20 @@ Proof.
     + move: a'' IH => [|a''] ? []; lia.
 Qed.
 
-Definition reaches (x y: Config) := exists k, multi_step k x = Some y.
-Definition reaches_plus (x y: Config) := exists k, 0 < k /\ multi_step k x = Some y.
-Definition non_terminating x := forall k, multi_step k x <> None.
+Definition reaches (x y: Config) := exists k, steps k x = Some y.
+Definition reaches_plus (x y: Config) := exists k, 0 < k /\ steps k x = Some y.
+Definition non_terminating x := forall k, steps k x <> None.
 
 Lemma reaches_plus_reaches {x y z} : reaches_plus x y -> reaches y z -> reaches_plus x z.
 Proof.
   move=> [k [? Hk]] [k' Hk']. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
 Lemma reaches_reaches_plus {x y z} : reaches x y -> reaches_plus y z -> reaches_plus x z.
 Proof.
   move=> [k Hk] [k' [? Hk']]. exists (k+k'). split; first by lia.
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
 Lemma reaches_plus_incl {x y} : reaches_plus x y -> reaches x y.
@@ -97,33 +97,33 @@ Proof. move=> [k [? Hk]]. by exists k. Qed.
 Lemma reaches_terminating {x y} : reaches x y -> terminating y -> terminating x.
 Proof.
   move=> [k Hk] [k' Hk']. exists (k+k').
-  move: Hk. by rewrite /multi_step iter_plus => ->.
+  move: Hk. by rewrite /steps iter_plus => ->.
 Qed.
 
-Lemma multi_step_k_monotone {k x} k' : multi_step k x = None -> k <= k' -> multi_step k' x = None.
+Lemma steps_k_monotone {k x} k' : steps k x = None -> k <= k' -> steps k' x = None.
 Proof.
   move=> + ?. have ->: k' = (k' - k) + k by lia.
   elim: (k' - k); first done.
   by move=> ? IH /IH /= ->.
 Qed.
 
-Lemma multi_step_plus {k x k' y} :
-multi_step k x = Some y -> multi_step (k + k') x = multi_step k' y.
-Proof. rewrite /multi_step iter_plus. by move=> ->. Qed.
+Lemma steps_plus {k x k' y} :
+steps k x = Some y -> steps (k + k') x = steps k' y.
+Proof. rewrite /steps iter_plus. by move=> ->. Qed.
 
 Lemma reaches_non_terminating {x y} : reaches x y -> non_terminating y -> non_terminating x.
 Proof.
   move=> [k Hk] Hy k'.
   have [|->] : k' <= k \/ k' = k + (k' - k) by lia.
-  - by move: Hk => + /multi_step_k_monotone H /H => ->.
-  - rewrite (multi_step_plus Hk). by apply: Hy.
+  - by move: Hk => + /steps_k_monotone H /H => ->.
+  - rewrite (steps_plus Hk). by apply: Hy.
 Qed.
 
 Lemma reaches_non_terminating' {x y} : reaches x y -> non_terminating x -> non_terminating y.
 Proof.
   move=> [k' Hk'] Hx k Hk.
   apply: (Hx (k' + k)).
-  by rewrite (multi_step_plus Hk').
+  by rewrite (steps_plus Hk').
 Qed.
 
 Lemma reaches_plus_state_bound {x y} : reaches_plus x y -> state x < l.
@@ -139,14 +139,14 @@ Lemma reaches_plus_trans {x y z} : reaches_plus x y -> reaches_plus y z -> reach
 Proof. by move=> /reaches_plus_incl /reaches_reaches_plus H /H. Qed.
 
 Lemma reaches_trans {x y z} : reaches x y -> reaches y z -> reaches x z.
-Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (multi_step_plus Hk). Qed.
+Proof. move=> [k Hk] [k' Hk']. exists (k+k'). by rewrite (steps_plus Hk). Qed.
 
 (* a configuration (p, (a, b))
   is either halting or uniformly transitions into a configuration with one zero counter *)
 Lemma next_waypoint p a b :
   terminating (p, (a, b)) +
-  { '(p', a') | forall n, exists k, 0 < k <= l - p /\ multi_step k (p, (n+a, b)) = Some (p', (n+a', 0)) } +
-  { '(p', b') | forall n, exists k, 0 < k <= l - p /\ multi_step k (p, (a, n+b)) = Some (p', (0, n+b')) }.
+  { '(p', a') | forall n, exists k, 0 < k <= l - p /\ steps k (p, (n+a, b)) = Some (p', (n+a', 0)) } +
+  { '(p', b') | forall n, exists k, 0 < k <= l - p /\ steps k (p, (a, n+b)) = Some (p', (0, n+b')) }.
 Proof.
   move Hn: (l - p) => n. elim: n p Hn a b.
   { move=> p ? a b. left. left. exists 1. rewrite /= /step.
@@ -173,12 +173,12 @@ Proof.
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi.
+        apply: steps_plus. by rewrite /= /step Hi.
       * right. exists (p', b').
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+        apply: steps_plus. by rewrite /= /step Hi Nat.add_succ_r.
     + move=> Hi.
       have [[|[[p' a'] HSp]]|[[p' b'] HSp]] := IH (S p) ltac:(lia) (S a) b.
       * move=> /reaches_terminating HSp. left. left.
@@ -187,12 +187,12 @@ Proof.
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+        apply: steps_plus. by rewrite /= /step Hi Nat.add_succ_r.
       * right. exists (p', b').
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi.
+        apply: steps_plus. by rewrite /= /step Hi.
   - case=> q Hi.
     + move: b => [|b].
       { left. right. exists (q, a) => n'. exists 1. 
@@ -204,12 +204,12 @@ Proof.
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi.
+        apply: steps_plus. by rewrite /= /step Hi.
       * right. exists (p', b').
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+        apply: steps_plus. by rewrite /= /step Hi Nat.add_succ_r.
     + move: a => [|a].
       { right. exists (q, b) => n'. exists 1. 
         split; first by lia. by rewrite /= /step Hi. }
@@ -220,12 +220,12 @@ Proof.
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi Nat.add_succ_r.
+        apply: steps_plus. by rewrite /= /step Hi Nat.add_succ_r.
       * right. exists (p', b').
         move=> n'.
         have [k [? <-]] := (HSp n').
         exists (1+k). split; first by lia.
-        apply: multi_step_plus. by rewrite /= /step Hi.
+        apply: steps_plus. by rewrite /= /step Hi.
 Qed.
 
 (* terminate or reach uniformly next config or reach small config *)
@@ -241,7 +241,7 @@ Proof.
     split; [lia|done].
   - right. exists (p', (0, b')).
     have [k [? Hk]] := Hp 0.
-    have ? := multi_step_bound Hk.
+    have ? := steps_bound Hk.
     split; [by exists k|lia].
 Qed.
 
@@ -255,7 +255,7 @@ Proof.
   - left. by left.
   - right. exists (p', (a', 0)).
     have [k [? Hk]] := Hp 0.
-    have ? := multi_step_bound Hk.
+    have ? := steps_bound Hk.
     split; [by exists k|lia].
   - left. right. exists (p', b') => n.
     have [k [? Hk]] := Hp n. exists k.
@@ -265,14 +265,14 @@ Qed.
 (*
 (* if b remains strictly positive throughout a computation, 
   then a is bounded by max l (a + (l - p)) *)
-Lemma multi_step_ubound_a p a b k :
+Lemma steps_ubound_a p a b k :
   (forall k', k' <= k ->
-    match multi_step k' (p, (a, b)) with
+    match steps k' (p, (a, b)) with
     | None => True
     | Some (p', (a', b')) => 0 < b'
     end) ->
   (forall k', k' <= k ->
-    match multi_step k' (p, (a, b)) with
+    match steps k' (p, (a, b)) with
     | None => True
     | Some (p', (a', b')) => a' <= Nat.max l (a + (l - p))
     end).
@@ -291,34 +291,34 @@ Proof.
   - by rewrite iter_None.
   - case.
     + (* zero b *)
-      move=> Hi. rewrite /= -/(multi_step _ _).
+      move=> Hi. rewrite /= -/(steps _ _).
       have := IH (S p) a 0 _ k' ltac:(lia).
-      case: (multi_step k' (S p, (a, 0))); last done.
+      case: (steps k' (S p, (a, 0))); last done.
       move=> [p' [a' b']]. apply: U; first by lia.
       move=> k'' ?.
       have := Hpab (S k'') ltac:(lia).
       by rewrite /= option_bind_iter /step Hi.
     + (* zero a *)
-      move=> Hi. rewrite /= -/(multi_step _ _).
+      move=> Hi. rewrite /= -/(steps _ _).
       have := IH (S p) 0 b _ k' ltac:(lia).
-      case: (multi_step k' (S p, (0, b))); last done.
+      case: (steps k' (S p, (0, b))); last done.
       move=> [p' [a' b']]. apply: U; first by lia.
       move=> k'' ?.
       have := Hpab (S k'') ltac:(lia).
       by rewrite /= option_bind_iter /step Hi.
   - case.
     + (* inc b *)
-      move=> Hi. rewrite /= -/(multi_step _ _).
+      move=> Hi. rewrite /= -/(steps _ _).
       have := IH (S p) a (S b) _ k' ltac:(lia).
-      case: (multi_step k' (S p, (a, S b))); last done.
+      case: (steps k' (S p, (a, S b))); last done.
       move=> [p' [a' b']]. apply: U; first by lia.
       move=> k'' ?.
       have := Hpab (S k'') ltac:(lia).
       by rewrite /= option_bind_iter /step Hi.
     + (* inc a *)
-      move=> Hi. rewrite /= -/(multi_step _ _).
+      move=> Hi. rewrite /= -/(steps _ _).
       have := IH (S p) (S a) b _ k' ltac:(lia).
-      case: (multi_step k' (S p, (S a, b))); last done.
+      case: (steps k' (S p, (S a, b))); last done.
       move=> [p' [a' b']]. apply: U; first by lia.
       move=> k'' ?.
       have := Hpab (S k'') ltac:(lia).
@@ -330,8 +330,8 @@ Proof.
       { move=> /(_ 0 ltac:(lia)) /=. lia. }
       move=> Hpab Hi.
       have := IH (S p) a b _ k' ltac:(lia).
-      rewrite /= -/(multi_step _ _).
-      case: (multi_step k' (S p, (a, b))); last done.
+      rewrite /= -/(steps _ _).
+      case: (steps k' (S p, (a, b))); last done.
       move=> [p' [a' b']]. apply: U; first by lia.
       move=> k'' ?.
       have := Hpab (S k'') ltac:(lia).
@@ -341,16 +341,16 @@ Proof.
       move: a Hpab Hi => [|a].
       * move=> Hpab Hi /=.
         have := IH q 0 b _ k' ltac:(lia).
-        rewrite /= -/(multi_step _ _).
-        case: (multi_step k' (q, (0, b))); last done.
+        rewrite /= -/(steps _ _).
+        case: (steps k' (q, (0, b))); last done.
         move=> [p' [a' b']]. apply: U; first by lia.
         move=> k'' ?.
         have := Hpab (S k'') ltac:(lia).
         by rewrite /= option_bind_iter /step Hi.
       * move=> Hpab Hi.
         have := IH (S p) a b _ k' ltac:(lia).
-        rewrite /= -/(multi_step _ _).
-        case: (multi_step k' (S p, (a, b))); last done.
+        rewrite /= -/(steps _ _).
+        case: (steps k' (S p, (a, b))); last done.
         move=> [p' [a' b']]. apply: U; first by lia.
         move=> k'' ?.
         have := Hpab (S k'') ltac:(lia).
@@ -365,12 +365,12 @@ Lemma loop_a {p a a' b} :
   non_terminating (p, (a, b)).
 Proof.
   move=> ? Hp k.
-  suff: forall m, multi_step k (p, (m + a, b)) <> None by move=> /(_ 0).
+  suff: forall m, steps k (p, (m + a, b)) <> None by move=> /(_ 0).
   elim: k; first done.
   move=> k IH m.
   have [k' [? Hk']] := Hp m.
-  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
-  move: Hk' => /multi_step_plus ->.
+  move=> /(steps_k_monotone (k' + k)) /(_ ltac:(lia)).
+  move: Hk' => /steps_plus ->.
   have ->: m + a' = (m + a' - a) + a by lia.
   by apply: IH.
 Qed.
@@ -381,12 +381,12 @@ Lemma loop_b {p a b b'} :
   non_terminating (p, (a, b)).
 Proof.
   move=> ? Hp k.
-  suff: forall m, multi_step k (p, (a, m + b)) <> None by move=> /(_ 0).
+  suff: forall m, steps k (p, (a, m + b)) <> None by move=> /(_ 0).
   elim: k; first done.
   move=> k IH m.
   have [k' [? Hk']] := Hp m.
-  move=> /(multi_step_k_monotone (k' + k)) /(_ ltac:(lia)).
-  move: Hk' => /multi_step_plus ->.
+  move=> /(steps_k_monotone (k' + k)) /(_ ltac:(lia)).
+  move: Hk' => /steps_plus ->.
   have ->: m + b' = (m + b' - b) + b by lia.
   by apply: IH.
 Qed.
@@ -395,8 +395,8 @@ Lemma reaches_plus_self_loop x : reaches_plus x x -> non_terminating x.
 Proof.
   move=> [k [? Hk]]. elim; first done.
   move=> k' Hk'.
-  move=> /(multi_step_k_monotone (k + k')) /(_ ltac:(lia)).
-  by rewrite (multi_step_plus Hk).
+  move=> /(steps_k_monotone (k + k')) /(_ ltac:(lia)).
+  by rewrite (steps_plus Hk).
 Qed.
 
 Definition update {X : Type} (f : nat -> X) n x :=

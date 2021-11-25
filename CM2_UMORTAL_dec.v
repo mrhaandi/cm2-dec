@@ -16,7 +16,7 @@ Variable K : nat.
 Variable HK : forall x, bounded K x.
 
 Notation step := (CM2.step M).
-Notation multi_step := (CM2.multi_step M).
+Notation steps := (CM2.steps M).
 Notation mortal := (CM2.mortal M).
 Notation reaches_plus := (CM2_facts.reaches_plus M).
 Notation non_terminating := (CM2_facts.non_terminating M).
@@ -24,14 +24,14 @@ Notation non_terminating := (CM2_facts.non_terminating M).
 (*
 Lemma bounded_inf k x : bounded k x -> {L | (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L) }.
 Proof.
-  move=> Hkx. exists (map (fun n => if multi_step n x is Some y then y else x) (seq 0 k)).
+  move=> Hkx. exists (map (fun n => if steps n x is Some y then y else x) (seq 0 k)).
   split; first by rewrite map_length seq_length.
   move=> y Hxy. admit. (* hard, doable *)
 Admitted.
 
 
 Lemma pointwise_decision k x : (mortal k x) + (not (mortal k x)).
-Proof. rewrite /mortal. by case: (multi_step k x) => [y|]; [right|left]. Qed.
+Proof. rewrite /mortal. by case: (steps k x) => [y|]; [right|left]. Qed.
 *)
 
 
@@ -40,24 +40,24 @@ Proof. rewrite /mortal. by case: (multi_step k x) => [y|]; [right|left]. Qed.
 Lemma mortal_bound k x : mortal k x -> mortal K x.
 Proof.
   rewrite /mortal. have [HkK|HKk] : k <= K \/ K < k by lia.
-  { move=> /multi_step_k_monotone. by apply. }
-  case Hxy: (multi_step K x) => [y|]; last done.
+  { move=> /steps_k_monotone. by apply. }
+  case Hxy: (steps K x) => [y|]; last done.
   have [L [? HL]] := HK x.
-  have : incl (map (fun n => if multi_step n x is Some y then y else x) (seq 0 (K+1))) L.
+  have : incl (map (fun n => if steps n x is Some y then y else x) (seq 0 (K+1))) L.
   { move=> z /in_map_iff [k'] [+ /in_seq ?].
-    case Hk': (multi_step k' x) => [z'|]; first last.
-    { move: Hk' => /(multi_step_k_monotone K) /(_ ltac:(lia)).
+    case Hk': (steps k' x) => [z'|]; first last.
+    { move: Hk' => /(steps_k_monotone K) /(_ ltac:(lia)).
       by rewrite Hxy. }
     move=> <-. apply: HL. by exists k'. }
   have Config_eq_dec : (forall x y : Config, {x = y} + {x <> y}) by do ? decide equality.
   move=> /(pigeonhole Config_eq_dec). rewrite map_length seq_length.
   move=> /(_ ltac:(lia)) /(dup_seq Config_eq_dec).
   move=> [[k1 k2]] [+ ?].
-  case Hk1: (multi_step k1 x) => [z|]; first last.
-  { move: Hk1 => /(multi_step_k_monotone K) /(_ ltac:(lia)).
+  case Hk1: (steps k1 x) => [z|]; first last.
+  { move: Hk1 => /(steps_k_monotone K) /(_ ltac:(lia)).
     by rewrite Hxy. }
-  case Hk2: (multi_step k2 x) => [z'|]; first last.
-  { move: Hk2 => /(multi_step_k_monotone K) /(_ ltac:(lia)).
+  case Hk2: (steps k2 x) => [z'|]; first last.
+  { move: Hk2 => /(steps_k_monotone K) /(_ ltac:(lia)).
     by rewrite Hxy. }
   move=> ?. subst z'.
   move=> Hk. suff: non_terminating x.
@@ -66,7 +66,7 @@ Proof.
   { move=> /reaches_non_terminating. apply. by exists k1. }
   apply: reaches_plus_self_loop. exists (k2-k1).
   split; first by lia.
-  by rewrite (ltac:(lia) : k2 = k1 + (k2-k1)) (multi_step_plus Hk1) in Hk2.
+  by rewrite (ltac:(lia) : k2 = k1 + (k2-k1)) (steps_plus Hk1) in Hk2.
 Qed.
 
 Lemma pos_K : K = 1 + (K - 1).
@@ -87,19 +87,19 @@ Proof.
   rewrite /= ?option_bind_iter /step -/step /=.
   case: (nth_error M p) => [i|]; last done.
   case: i.
-  - move=> c. rewrite -?/(multi_step _ _).
+  - move=> c. rewrite -?/(steps _ _).
     rewrite (IH _ (_ + a) (_ + b) ltac:(lia)).
     by rewrite (IH _ (_ + (S K')) (_ + b) ltac:(lia)).
   - move=> [] q.
     + case: b => [|b].
-      * rewrite -?/(multi_step _ _).
+      * rewrite -?/(steps _ _).
         rewrite (IH _ a 0 ltac:(lia)).
         by rewrite (IH _ (S K') 0 ltac:(lia)).
-      * rewrite -?/(multi_step _ _).
+      * rewrite -?/(steps _ _).
         rewrite (IH _ a b ltac:(lia)).
         by rewrite (IH _ (S K') b ltac:(lia)).
     + case: a Ha => [|a] Ha; first by lia.
-      rewrite -?/(multi_step _ _).
+      rewrite -?/(steps _ _).
       apply: IH. lia.
 Qed.
 
@@ -111,18 +111,18 @@ Proof.
   rewrite /= ?option_bind_iter /step -/step /=.
   case: (nth_error M p) => [i|]; last done.
   case: i.
-  - move=> c. rewrite -?/(multi_step _ _).
+  - move=> c. rewrite -?/(steps _ _).
     rewrite (IH _ (_ + a) (_ + b) ltac:(lia)).
     by rewrite (IH _ (_ + a) (_ + (S K')) ltac:(lia)).
   - move=> [] q.
     + case: b Hb => [|b] Hb; first by lia.
-      rewrite -?/(multi_step _ _).
+      rewrite -?/(steps _ _).
       apply: IH. lia.
     + case: a => [|a].
-      * rewrite -?/(multi_step _ _).
+      * rewrite -?/(steps _ _).
         rewrite (IH _ 0 b ltac:(lia)).
         by rewrite (IH _ 0 (S K') ltac:(lia)).
-      * rewrite -?/(multi_step _ _).
+      * rewrite -?/(steps _ _).
         rewrite (IH _ a b ltac:(lia)).
         by rewrite (IH _ a (S K') ltac:(lia)).
 Qed.
@@ -132,10 +132,10 @@ Proof.
   have := Forall_dec (fun 'x => mortal K x) _
     (list_prod (seq 0 (length M)) (list_prod (seq 0 (K+1)) (seq 0 (K+1)))).
   case.
-  { move=> x. rewrite /(mortal K). by case: (multi_step K x) => [y|]; [right|left]. }
+  { move=> x. rewrite /(mortal K). by case: (steps K x) => [y|]; [right|left]. }
   - move=> H'M. left. exists K => - [p [a b]].
     have [?|?] : length M <= p \/ p < length M by lia.
-    { rewrite /(mortal K) pos_K /multi_step iter_plus /= /step /=.
+    { rewrite /(mortal K) pos_K /steps iter_plus /= /step /=.
       have -> : nth_error M p = None by apply /nth_error_None.
       by rewrite iter_None. }
     wlog ? : a /(a <= K).
@@ -161,13 +161,13 @@ Section BoundRefutation.
 Variable M : Cm2.
 Variable HM : not (uniformly_bounded M).
 
-Notation multi_step := (CM2.multi_step M).
+Notation steps := (CM2.steps M).
 
 (* an unbounded machine is immortal *)
 Lemma not_uniformly_mortal : not (uniformly_mortal M).
 Proof.
   move=> [k Hk]. apply: HM. exists k => x.
-  exists (map (fun n => if multi_step n x is Some y then y else x) (seq 0 k)).
+  exists (map (fun n => if steps n x is Some y then y else x) (seq 0 k)).
   split.
   { rewrite map_length seq_length. lia. }
   move=> y [k' Hk'].
@@ -175,7 +175,7 @@ Proof.
   - apply /in_map_iff. exists k'. rewrite Hk'.
     split; first done. apply /in_seq. lia.
   - have := Hk x. rewrite /mortal.
-    move=> /(multi_step_k_monotone k') /(_ ltac:(lia)).
+    move=> /(steps_k_monotone k') /(_ ltac:(lia)).
     by rewrite Hk'.
 Qed.
 

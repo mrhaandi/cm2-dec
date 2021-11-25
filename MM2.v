@@ -32,11 +32,11 @@ Arguments value2 !x /.
     the instruction inc false maps 
       a configuration (p, (v1, v2)) (1+p, (1+v1, v2))
     an instruction dec true q maps
-      a configuration (p, (v1, 0)) to (1+p, (v1, 0)) 
-      a configuration (p, (v1, 1+v2)) to (q, (v1, v2)) 
+      a configuration (p, (v1, 0)) to (q, (v1, 0)) 
+      a configuration (p, (v1, 1+v2)) to (1+p, (v1, v2)) 
     an instruction dec false q maps
-      a configuration (p, (0, v2)) to (1+p, (0, v2)) 
-      a configuration (p, (1+v1, v2)) to (q, (v1, v2)) *)
+      a configuration (p, (0, v2)) to (q, (0, v2)) 
+      a configuration (p, (1+v1, v2)) to (1+p, (v1, v2)) *)
 Inductive Instruction : Set :=
   | halt : Instruction
   | zero : bool -> Instruction
@@ -71,12 +71,12 @@ Definition step (M: Mm2) (x: Config) : option Config :=
 Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
   match oX with None => None | Some x => f x end.
 
-Definition multi_step (M: Mm2) (n: nat) (x: Config) : option Config :=
+Definition steps (M: Mm2) (n: nat) (x: Config) : option Config :=
   Nat.iter n (option_bind (step M)) (Some x).
 
 (* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Mm2) (x: Config) :=
-  exists n, multi_step M n x = None.
+  exists n, steps M n x = None.
 
 (* Two-counter Minsky Machine Halting Problem
    Given a two-counter Minsky machine M and a configucation c, 
