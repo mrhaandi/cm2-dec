@@ -7,9 +7,10 @@
 
 (* 
   Problem(s):
-    Reversible Two Counter Machine Halting (CM2_REV_HALT)
-    Two Counter Machine Uniform Boundedness (CM2_UBOUNDED)
-    Two Counter Machine Uniform Mortality (CM2_UMORTAL)
+    Two-counter Machine Reversibility (CM2_REV)
+    Reversible Two-counter Machine Halting (CM2_REV_HALT)
+    Two-counter Machine Uniform Boundedness (CM2_UBOUNDED)
+    Two-counter Machine Uniform Mortality (CM2_UMORTAL)
 *)
 
 Require Import List.
@@ -39,10 +40,10 @@ Inductive Instruction : Set :=
   | inc : bool -> Instruction
   | dec : bool -> nat -> Instruction.
 
-(* a two counter machine is a list of instructions *)
+(* a two-counter machine is a list of instructions *)
 Definition Cm2 : Set := list Instruction.
 
-(* partial two counter machine step function *)
+(* partial two-counter machine step function *)
 Definition step (M: Cm2) (x: Config) : option Config :=
   match nth_error M (state x) with
   | None => None (* halting configuration *)
@@ -64,9 +65,11 @@ Definition step (M: Cm2) (x: Config) : option Config :=
 Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
   match oX with None => None | Some x => f x end.
 
+(* iterated partial two-counter machine step function *)
 Definition multi_step (M: Cm2) (k: nat) (x: Config) : option Config :=
   Nat.iter k (option_bind (step M)) (Some x).
 
+(* two-counter machine configuration reachability *)
 Definition reaches (M: Cm2) (x y: Config) :=
   exists k, multi_step M k x = Some y.
 
@@ -78,31 +81,47 @@ Definition terminating (M: Cm2) (x: Config) :=
 Definition reversible (M : Cm2) : Prop := 
   forall x y z, step M x = Some z -> step M y = Some z -> x = y.
 
-(* bound for the number of reachable configurations *)
+(* k bounds the number of reachable configurations from x *)
 Definition bounded (M: Cm2) (k: nat) (x: Config) : Prop := 
-  exists (L: list Config), (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L).
+  exists (L: list Config), (length L <= k) /\
+    (forall (y: Config), reaches M x y -> In y L).
 
+(* uniform bound for number of reachable configurations *)
 Definition uniformly_bounded (M: Cm2) : Prop :=
   exists k, forall x, bounded M k x.
 
-(* bound for the number of reachable configurations *)
+(* k bounds the number of steps in a terminating run from x *)
 Definition mortal (M: Cm2) (k: nat) (x: Config) : Prop := 
   multi_step M k x = None.
 
+(* uniform bound for number of steps until termination *)
 Definition uniformly_mortal (M: Cm2) : Prop :=
   exists k, forall x, mortal M k x.
 
+(* Two-counter Machine Reversibility:
+   Given a two-counter machine M,
+   is the step function of M injective? *)
 Definition CM2_REV : Cm2 -> Prop :=
   fun M => reversible M.
 
-(* Reversible Two-counter Machine Halting Problem
-   Given a reversible two-counter machine M and a configucation c, 
-   does a run in M starting from c eventually terminate? *)
+(* Reversible Two-counter Machine Halting:
+   Given a reversible two-counter machine M and a configucation x, 
+   does a run in M starting from x eventually terminate? *)
 Definition CM2_REV_HALT : { M: Cm2 | reversible M } * Config -> Prop :=
-  fun '((exist _ M _), c) => terminating M c.
+  fun '((exist _ M _), x) => terminating M x.
 
+(* Two-counter Machine Uniform Boundedness:
+   Given a two-counter machine M,
+   is there a uniform bound n,
+   such that for any configuration x,
+   the number of reacheable configurations from x is bounded by n? *)
 Definition CM2_UBOUNDED : Cm2 -> Prop :=
   fun M => uniformly_bounded M.
 
+(* Two-counter Machine Uniform Mortality:
+   Given a two-counter machine M,
+   is there a uniform bound n,
+   such that for any configuration x,
+   a run in M starting from x terminates after at most n steps? *)
 Definition CM2_UMORTAL : Cm2 -> Prop :=
   fun M => uniformly_mortal M.

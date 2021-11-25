@@ -1,10 +1,11 @@
 -Q . M2
 
+MM2.v
+MM2_HALT_dec.v
 CM2.v
 CM2_facts.v
+CM2_REV_dec.v
 CM2_REV_HALT_dec.v
 CM2_UBOUNDED_dec.v
 CM2_UMORTAL_dec.v
-MM2.v
-MM2_HALT_dec.v
 MainResults.v
