@@ -1,7 +1,7 @@
 Require Import List ListDec PeanoNat Lia Relation_Operators Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
-Require Import M2.CM2 M2.CM2_facts.
+Require Import M2.Facts M2.CM2 M2.CM2_facts.
 
 Section Construction.
 Variable M : Cm2.
@@ -33,8 +33,8 @@ Lemma reachesE x y : reaches x y -> clos_refl_trans Config (fun x' y' => step x'
 Proof.
   move=> [k]. elim: k x.
   { move=> x [] <-. by apply: rt_refl. }
-  move=> k IH x. rewrite /= option_bind_iter.
-  case Hxz: (step x) => [z|]; last by rewrite iter_None.
+  move=> k IH x. rewrite /= obind_oiter.
+  case Hxz: (step x) => [z|]; last by rewrite oiter_None.
   move=> /IH ?. apply: rt_trans; last by eassumption.
   by apply: rt_step.
 Qed.
@@ -51,7 +51,7 @@ Lemma path_S {k x} y : step x = Some y -> path (S k) x = (Some x) :: (path k y).
 Proof.
   move=> Hxy. rewrite /path /= -seq_shift map_map.
   congr cons. apply: map_ext => - ?.
-  by rewrite /= option_bind_iter Hxy.
+  by rewrite /= obind_oiter Hxy.
 Qed.
 
 Lemma path_plus {k k' x} y : steps k x = Some y ->
@@ -84,16 +84,16 @@ Lemma path_loopE K x : In (steps K x) (path K x) ->
   forall k, In (steps k x) (path K x).
 Proof.
   elim: K x; first done.
-  move=> K IH x. rewrite [steps _ _]/= option_bind_iter.
+  move=> K IH x. rewrite [steps _ _]/= obind_oiter.
   case Hxz: (step x) => [z|].
   - move=> H. rewrite (path_S z Hxz) /= in H. case: H.
     + move=> Hzx k. have /steps_loop_mod -> : steps (S K) x = Some x.
-      { by rewrite /steps /= option_bind_iter Hxz. }
+      { by rewrite /steps /= obind_oiter Hxz. }
       by apply /In_pathI /(Nat.mod_upper_bound k (S K)).
     + rewrite (path_S z Hxz).
       move=> /IH {}IH [|k]; first by left.
-      rewrite /= option_bind_iter Hxz. right. by apply: IH.
-  - rewrite iter_None. move=> /in_map_iff [k] [Hk] /in_seq HK.
+      rewrite /= obind_oiter Hxz. right. by apply: IH.
+  - rewrite oiter_None. move=> /in_map_iff [k] [Hk] /in_seq HK.
     move=> k'. have [|Hkk'] : k' < k \/ k <= k' by lia.
     + move=> ?. apply: In_pathI. lia.
     + move: (Hk) => /(steps_k_monotone k') /(_ Hkk') ->.
@@ -195,8 +195,8 @@ Lemma steps_values_bound k x y : steps k x = Some y ->
   value2 x <= k + value2 y /\ value2 y <= k + value2 x.
 Proof.
   elim: k x. { move=> ? [<-]. lia. }
-  move=> k IH x. rewrite /= option_bind_iter /step -/step.
-  case: (nth_error M (state x)); last by rewrite iter_None.
+  move=> k IH x. rewrite /= obind_oiter /step -/step.
+  case: (nth_error M (state x)); last by rewrite oiter_None.
   case.
   - move=> [] /IH /=; lia.
   - move=> [] ?.
@@ -214,8 +214,8 @@ Lemma shift_steps_a k K p a b :
 Proof.
   elim: k K p a b; first done.
   move=> k IH [|K] p a b ?; first by lia.
-  rewrite /steps /= ?option_bind_iter /step -/step /=.
-  case: (nth_error M p); last by rewrite ?iter_None.
+  rewrite /steps /= ?obind_oiter /step -/step /=.
+  case: (nth_error M p); last by rewrite ?oiter_None.
   case.
   - move=> c. rewrite -IH; first by lia.
     congr steps. congr (_, (_, _)). lia.
@@ -234,8 +234,8 @@ Lemma shift_steps_b k K p a b :
 Proof.
   elim: k K p a b; first done.
   move=> k IH [|K] p a b ?; first by lia.
-  rewrite /steps /= ?option_bind_iter /step -/step /=.
-  case: (nth_error M p); last by rewrite ?iter_None.
+  rewrite /steps /= ?obind_oiter /step -/step /=.
+  case: (nth_error M p); last by rewrite ?oiter_None.
   case.
   - move=> c. rewrite -IH; first by lia.
     congr steps. congr (_, (_, _)). lia.
@@ -297,7 +297,7 @@ Proof.
   move: x Hx Hz => [p [a b]] Hx Hz.
   have Hp : not (length M <= p).
   { move=> /nth_error_None HM. move: Hz. have -> : K = S (K - 1) by lia.
-    by rewrite /steps /= option_bind_iter /step /= HM iter_None. }
+    by rewrite /steps /= obind_oiter /step /= HM oiter_None. }
   move: Hx Hz.
   (* it suffices to consider configurations up to values K  *)
   wlog: a b z /(a <= K /\ b <= K); first last.
@@ -580,8 +580,8 @@ Proof.
   exists 1. move=> x. exists [x]. split; first done.
   move=> y [[|k]].
   - move=> [<-]. by left.
-  - rewrite /= option_bind_iter /CM2.step.
-    by case: (state x); rewrite /= iter_None.
+  - rewrite /= obind_oiter /CM2.step.
+    by case: (state x); rewrite /= oiter_None.
 Qed.
 
 Lemma reaches_bounded {K k x y} : steps k x = Some y -> bounded K y -> bounded (k+K) x.

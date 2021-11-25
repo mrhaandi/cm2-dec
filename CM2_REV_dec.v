@@ -1,7 +1,7 @@
 Require Import List ListDec PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
-Require Import M2.CM2 M2.CM2_facts.
+Require Import M2.Facts M2.CM2 M2.CM2_facts.
 
 
 Section Construction.

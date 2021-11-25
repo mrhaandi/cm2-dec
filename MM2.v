@@ -7,10 +7,10 @@
 
 (* 
   Problem(s):
-    Two Counter Minsky Machine Halting (MM2_HALT)
+    Two-Counter Minsky Machine Halting (MM2_HALT)
 *)
 
-Require Import List.
+Require Import List ssrfun.
 
 (* a configuration consists of a state and two counter values *)
 Definition Config : Set := nat * (nat * nat).
@@ -68,17 +68,14 @@ Definition step (M: Mm2) (x: Config) : option Config :=
       end
   end.
 
-Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
-  match oX with None => None | Some x => f x end.
-
 Definition steps (M: Mm2) (n: nat) (x: Config) : option Config :=
-  Nat.iter n (option_bind (step M)) (Some x).
+  Nat.iter n (obind (step M)) (Some x).
 
 (* does M eventually terminate starting from the configuration x? *)
 Definition terminating (M: Mm2) (x: Config) :=
   exists n, steps M n x = None.
 
-(* Two-counter Minsky Machine Halting Problem
+(* Two-counter Minsky Machine Halting Problem:
    Given a two-counter Minsky machine M and a configucation c, 
    does a run in M starting from c eventually terminate? *)
 Definition MM2_HALT : Mm2 * Config -> Prop :=

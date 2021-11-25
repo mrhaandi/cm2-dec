@@ -1,7 +1,7 @@
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
 Require Import ssreflect ssrbool ssrfun.
-Require Import M2.CM2 M2.CM2_facts.
+Require Import M2.Facts M2.CM2 M2.CM2_facts.
 
 Lemma eq_or_inf {X: Type} : (forall (x y: X), {x = y} + {x <> y}) ->
   forall (x y: X) P, (x = y) \/ P -> (x = y) + P.
@@ -15,7 +15,7 @@ Lemma config_eta (x : Config) : x = (state x, (value1 x, value2 x)).
 Proof. by move: x => [? [? ?]]. Qed.
 
 Definition oiter {X : Type} (f : X -> option X) (n : nat) (x : X) :=
-  Nat.iter n (option_bind f) (Some x).
+  Nat.iter n (obind f) (Some x).
 
 (* an avid instruction may jump to a valid state (except the first) *)
 Inductive avid (l : nat) : Instruction -> Prop :=

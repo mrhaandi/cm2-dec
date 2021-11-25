@@ -13,7 +13,7 @@
     Two-counter Machine Uniform Mortality (CM2_UMORTAL)
 *)
 
-Require Import List.
+Require Import List ssrfun.
 
 (* a configuration consists of a state and two counter values *)
 Definition Config : Set := nat * (nat * nat).
@@ -62,12 +62,9 @@ Definition step (M: Cm2) (x: Config) : option Config :=
       end
   end.
 
-Definition option_bind {X Y : Type} (f : X -> option Y) (oX : option X) : option Y :=
-  match oX with None => None | Some x => f x end.
-
 (* iterated partial two-counter machine step function *)
 Definition steps (M: Cm2) (k: nat) (x: Config) : option Config :=
-  Nat.iter k (option_bind (step M)) (Some x).
+  Nat.iter k (obind (step M)) (Some x).
 
 (* two-counter machine configuration reachability *)
 Definition reaches (M: Cm2) (x y: Config) :=

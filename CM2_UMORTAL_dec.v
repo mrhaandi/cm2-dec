@@ -2,7 +2,7 @@ Require Import List PeanoNat Lia Operators_Properties ConstructiveEpsilon.
 Import ListNotations.
 
 Require Import ssreflect ssrbool ssrfun.
-Require Import M2.CM2 M2.CM2_facts.
+Require Import M2.Facts M2.CM2 M2.CM2_facts.
 Require M2.CM2_UBOUNDED_dec.
 
 Section BoundConstruction.
@@ -84,7 +84,7 @@ Lemma mortal_K_bound_a {p a b} :
 Proof.
   rewrite /mortal. elim: (K) p a b; first done.
   move=> K' IH p a b Ha.
-  rewrite /= ?option_bind_iter /step -/step /=.
+  rewrite /= ?obind_oiter /step -/step /=.
   case: (nth_error M p) => [i|]; last done.
   case: i.
   - move=> c. rewrite -?/(steps _ _).
@@ -108,7 +108,7 @@ Lemma mortal_K_bound_b {p a b} :
 Proof.
   rewrite /mortal. elim: (K) p a b; first done.
   move=> K' IH p a b Hb.
-  rewrite /= ?option_bind_iter /step -/step /=.
+  rewrite /= ?obind_oiter /step -/step /=.
   case: (nth_error M p) => [i|]; last done.
   case: i.
   - move=> c. rewrite -?/(steps _ _).
@@ -137,7 +137,7 @@ Proof.
     have [?|?] : length M <= p \/ p < length M by lia.
     { rewrite /(mortal K) pos_K /steps iter_plus /= /step /=.
       have -> : nth_error M p = None by apply /nth_error_None.
-      by rewrite iter_None. }
+      by rewrite oiter_None. }
     wlog ? : a /(a <= K).
     { move=> H. (have [?|/mortal_K_bound_a] : a <= K \/ K <= a by lia); first by apply H.
       move=> ->. by apply: H. }

@@ -1,51 +1,18 @@
-(* decider for MM2 halting *)
+(* 
+  Autor(s):
+    Andrej Dudenhefner (1) 
+  Affiliation(s):
+    (1) TU Dortmund University, Dortmund, Germany
+*)
+
+(* 
+  Decision procedure for two-counter Minsky machine halting
+*)
 
 Require Import List PeanoNat Lia Operators_Properties.
 Import ListNotations.
-Require Import ssreflect.
-Require Import M2.MM2 .
-
-(* induction principle wrt. a decreasing measure f *)
-(* example: elim /(measure_ind length) : l. *)
-Lemma measure_ind {X : Type} (f : X -> nat) (P : X -> Prop) : 
-  (forall x, (forall y, f y < f x -> P y) -> P x) -> forall (x : X), P x.
-Proof.
-  apply : well_founded_ind.
-  apply : Wf_nat.well_founded_lt_compat. move => *. by eassumption.
-Qed.
-Arguments measure_ind {X}.
-
-Lemma iter_plus {X} (f : X -> X) (x : X) n m : Nat.iter (n + m) f x = Nat.iter m f (Nat.iter n f x).
-Proof.
-  elim: m; first by rewrite Nat.add_0_r.
-  move=> m /= <-. by have ->: n + S m = S n + m by lia.
-Qed.
-
-Lemma iter_None {X : Type} (f : X -> option X) k : Nat.iter k (option_bind f) None = None.
-Proof. elim: k; [done | by move=> /= ? ->]. Qed.
-
-Lemma option_bind_iter {X : Type} (f : X -> option X) k x : 
-  option_bind f (Nat.iter k (option_bind f) (Some x)) = Nat.iter k (option_bind f) (f x).
-Proof. elim: k; [done|by move=> k /= ->]. Qed.
-
-Lemma list_sum_map_le {X: Type} f g (L: list X) :
-  (forall x, f x <= g x) ->
-  list_sum (map f L) <= list_sum (map g L).
-Proof.
-  move=> Hfg. elim: L; first done.
-  move=> x L IH /=. have := Hfg x. lia.
-Qed.
-
-Lemma list_sum_map_lt {X: Type} {f g} {L: list X} {x} :
-  (forall x, f x <= g x) ->
-  In x L -> f x < g x ->
-  list_sum (map f L) < list_sum (map g L).
-Proof.
-  move=> Hfg + H'fg. elim: L; first done.
-  move=> y L IH /= [->|].
-  - have := list_sum_map_le f g L Hfg. lia.
-  - move=> /IH. have := Hfg y. lia.
-Qed.
+Require Import ssreflect ssrbool ssrfun.
+Require Import M2.Facts M2.MM2.
 
 Section Construction.
 Variable M : Mm2.
@@ -132,7 +99,7 @@ Proof.
   suff: not (l <= state x) by lia.
   move=> /nth_error_None Hx.
   move: Hk. have ->: k = S (k - 1) by lia.
-  by rewrite /= option_bind_iter /step Hx iter_None.
+  by rewrite /= obind_oiter /step Hx oiter_None.
 Qed.
 
 Lemma reaches_plus_trans {x y z} : reaches_plus x y -> reaches_plus y z -> reaches_plus x z.
@@ -261,103 +228,6 @@ Proof.
     have [k [? Hk]] := Hp n. exists k.
     split; [lia|done].
 Qed.
-
-(*
-(* if b remains strictly positive throughout a computation, 
-  then a is bounded by max l (a + (l - p)) *)
-Lemma steps_ubound_a p a b k :
-  (forall k', k' <= k ->
-    match steps k' (p, (a, b)) with
-    | None => True
-    | Some (p', (a', b')) => 0 < b'
-    end) ->
-  (forall k', k' <= k ->
-    match steps k' (p, (a, b)) with
-    | None => True
-    | Some (p', (a', b')) => a' <= Nat.max l (a + (l - p))
-    end).
-Proof.
-  elim: k p a b.
-  { move=> p a b _ [|?] ? /=; lia. }
-  move=> k IH p a b /= Hpab [|k'].
-  { move=> /=. lia. }
-  rewrite /= option_bind_iter /step.
-  case Hi: (nth_error M (state (p, (a, b)))) => [i|]; last by rewrite iter_None.
-  have U : forall (A B C : Prop), (B -> C) -> A -> (A -> B) -> C by tauto.
-  have ? : l > p.
-  { suff: not (l <= p) by lia.
-    move=> /nth_error_None. by move: Hi => /= ->. }
-  rewrite -/step => ?. case: i Hi.
-  - by rewrite iter_None.
-  - case.
-    + (* zero b *)
-      move=> Hi. rewrite /= -/(steps _ _).
-      have := IH (S p) a 0 _ k' ltac:(lia).
-      case: (steps k' (S p, (a, 0))); last done.
-      move=> [p' [a' b']]. apply: U; first by lia.
-      move=> k'' ?.
-      have := Hpab (S k'') ltac:(lia).
-      by rewrite /= option_bind_iter /step Hi.
-    + (* zero a *)
-      move=> Hi. rewrite /= -/(steps _ _).
-      have := IH (S p) 0 b _ k' ltac:(lia).
-      case: (steps k' (S p, (0, b))); last done.
-      move=> [p' [a' b']]. apply: U; first by lia.
-      move=> k'' ?.
-      have := Hpab (S k'') ltac:(lia).
-      by rewrite /= option_bind_iter /step Hi.
-  - case.
-    + (* inc b *)
-      move=> Hi. rewrite /= -/(steps _ _).
-      have := IH (S p) a (S b) _ k' ltac:(lia).
-      case: (steps k' (S p, (a, S b))); last done.
-      move=> [p' [a' b']]. apply: U; first by lia.
-      move=> k'' ?.
-      have := Hpab (S k'') ltac:(lia).
-      by rewrite /= option_bind_iter /step Hi.
-    + (* inc a *)
-      move=> Hi. rewrite /= -/(steps _ _).
-      have := IH (S p) (S a) b _ k' ltac:(lia).
-      case: (steps k' (S p, (S a, b))); last done.
-      move=> [p' [a' b']]. apply: U; first by lia.
-      move=> k'' ?.
-      have := Hpab (S k'') ltac:(lia).
-      by rewrite /= option_bind_iter /step Hi.
-  - move=> [] q.
-    + (* dec b *)
-      move=> Hi.
-      move: b Hpab Hi => [|b].
-      { move=> /(_ 0 ltac:(lia)) /=. lia. }
-      move=> Hpab Hi.
-      have := IH (S p) a b _ k' ltac:(lia).
-      rewrite /= -/(steps _ _).
-      case: (steps k' (S p, (a, b))); last done.
-      move=> [p' [a' b']]. apply: U; first by lia.
-      move=> k'' ?.
-      have := Hpab (S k'') ltac:(lia).
-      by rewrite /= option_bind_iter /step Hi.
-    + (* dec a *)
-      move=> Hi.
-      move: a Hpab Hi => [|a].
-      * move=> Hpab Hi /=.
-        have := IH q 0 b _ k' ltac:(lia).
-        rewrite /= -/(steps _ _).
-        case: (steps k' (q, (0, b))); last done.
-        move=> [p' [a' b']]. apply: U; first by lia.
-        move=> k'' ?.
-        have := Hpab (S k'') ltac:(lia).
-        by rewrite /= option_bind_iter /step Hi.
-      * move=> Hpab Hi.
-        have := IH (S p) a b _ k' ltac:(lia).
-        rewrite /= -/(steps _ _).
-        case: (steps k' (S p, (a, b))); last done.
-        move=> [p' [a' b']]. apply: U; first by lia.
-        move=> k'' ?.
-        have := Hpab (S k'') ltac:(lia).
-        by rewrite /= option_bind_iter /step Hi.
-Qed.
-*)
-
 
 Lemma loop_a {p a a' b} :
   a <= a' ->
@@ -517,7 +387,7 @@ Proof.
   - right. by exists (p', (a', b')).
 Qed.
 
-(* from any config can decide or get to next small waypoint *)
+(* from any config can decide termination or get to next small waypoint *)
 Lemma next_small_waypoint p a b :
   terminating (p, (a, b)) +
   non_terminating (p, (a, b)) +
