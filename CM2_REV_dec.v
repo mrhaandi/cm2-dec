@@ -7,8 +7,8 @@ Require Import M2.Facts M2.CM2 M2.CM2_facts.
 Section Construction.
 Variable M : Cm2.
 
-Notation step := (CM2.step M).
-Notation l := (length M).
+#[local] Notation step := (CM2.step M).
+#[local] Notation l := (length M).
 
 Theorem decision : (reversible M) + (not (reversible M)).
 Proof.

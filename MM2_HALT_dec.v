@@ -17,10 +17,10 @@ Require Import M2.Facts M2.MM2.
 Section Construction.
 Variable M : Mm2.
 
-Notation step := (MM2.step M).
-Notation steps := (MM2.steps M).
-Notation terminating := (MM2.terminating M).
-Notation l := (length M).
+#[local] Notation step := (MM2.step M).
+#[local] Notation steps := (MM2.steps M).
+#[local] Notation terminating := (MM2.terminating M).
+#[local] Notation l := (length M).
 
 (* after k steps values change at most by k (or are reset and at most k) *)
 Lemma steps_bound {k p a b p' a' b'} : steps k (p, (a, b)) = Some (p', (a', b')) -> 

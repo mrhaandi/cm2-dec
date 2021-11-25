@@ -6,149 +6,11 @@ Require Import M2.Facts M2.CM2 M2.CM2_facts.
 Section Construction.
 Variable M : Cm2.
 
-Notation steps := (CM2.steps M).
-Notation bounded := (CM2.bounded M).
-Notation step := (CM2.step M).
-Notation reaches := (CM2.reaches M).
-
-Definition path k x := map (fun n => steps n x) (seq 0 k).
-
-Lemma path_length {k x} : length (path k x) = k.
-Proof. by rewrite /path map_length seq_length. Qed.
-
-Lemma In_pathE K x oy : In oy (path K x) -> exists k, k < K /\ steps k x = oy.
-Proof.
-  move=> /in_map_iff [k] [<-] /in_seq ?.
-  exists k. split; [lia|done].
-Qed.
-
-Lemma In_pathI k x K : k < K -> In (steps k x) (path K x).
-Proof.
-  move=> ?. apply /in_map_iff. exists k. split; first done.
-  apply /in_seq. lia.
-Qed.
-
-Lemma path_S {k x} y : step x = Some y -> path (S k) x = (Some x) :: (path k y).
-Proof.
-  move=> Hxy. rewrite /path /= -seq_shift map_map.
-  congr cons. apply: map_ext => - ?.
-  by rewrite /= obind_oiter Hxy.
-Qed.
-
-Lemma path_plus {k k' x} y : steps k x = Some y ->
-  path (k+k') x = path k x ++ path k' y.
-Proof.
-  move=> Hxy. rewrite /path seq_app map_app /=.
-  congr app.
-  have ->: seq k k' = map (fun i => k+i) (seq 0 k').
-  { elim: k'; first done.
-    move=> k' IH. have ->: S k' = k' + 1 by lia.
-    by rewrite ?seq_app IH map_app. }
-  rewrite map_map. apply: map_ext => - ?.
-  by move: Hxy => /steps_plus ->.
-Qed.
-
-Lemma path_S_last {k x} : path (S k) x = (path k x) ++ [steps k x].
-Proof. by rewrite /path seq_S map_app. Qed.
-
-Lemma path_loopE K x : In (steps K x) (path K x) -> 
-  forall k, In (steps k x) (path K x).
-Proof.
-  elim: K x; first done.
-  move=> K IH x. rewrite [steps _ _]/= obind_oiter.
-  case Hxz: (step x) => [z|].
-  - move=> H. rewrite (path_S z Hxz) /= in H. case: H.
-    + move=> Hzx k. have /steps_loop_mod -> : steps (S K) x = Some x.
-      { by rewrite /steps /= obind_oiter Hxz. }
-      by apply /In_pathI /(Nat.mod_upper_bound k (S K)).
-    + rewrite (path_S z Hxz).
-      move=> /IH {}IH [|k]; first by left.
-      rewrite /= obind_oiter Hxz. right. by apply: IH.
-  - rewrite oiter_None. move=> /in_map_iff [k] [Hk] /in_seq HK.
-    move=> k'. have [|Hkk'] : k' < k \/ k <= k' by lia.
-    + move=> ?. apply: In_pathI. lia.
-    + move: (Hk) => /(steps_k_monotone k') /(_ Hkk') ->.
-      rewrite -Hk. apply: In_pathI. lia.
-Qed.
-
-Lemma path_loopE' K x : In (steps K x) (path K x) -> 
-  forall y, reaches x y -> In (Some y) (path K x).
-Proof.
-  move=> /path_loopE H y [k] H'. move: (H k).
-  by congr In.
-Qed.
-
-Lemma loop_bounded K x : In (steps K x) (path K x) -> bounded K x.
-Proof.
-  move=> /path_loopE' H. 
-  exists (map (fun oy => if oy is Some y then y else x) (path K x)).
-  split. { by rewrite map_length path_length. }
-  move=> y /H {}H. apply /in_map_iff. by exists (Some y).
-Qed.
-
-Lemma path_noloopI k x :
-  ~ In (steps k x) (path k x) -> NoDup (path (k + 1) x).
-Proof.
-  elim: k x.
-  { move=> ??. constructor; [done| constructor]. }
-  move=> k IH x.
-  rewrite path_S_last /steps in_app_iff /= -/(steps k x).
-  move=> /Decidable.not_or.
-  have [|/IH ?] := In_dec option_Config_eq_dec (steps k x) (path k x).
-  - move=> /path_loopE /(_ (S k)). tauto.
-  - move=> [?] ?.
-    apply /(NoDup_Add (a := steps (S k) x) (l := path (k + 1) x)).
-    + rewrite path_S_last.
-      have := Add_app (steps (k + 1) x) (path (k + 1) x) [].
-      congr Add.
-      * congr steps. lia.
-      * by rewrite app_nil_r.
-    + constructor; first done.
-      have ->: k + 1 = S k by lia.
-      rewrite path_S_last in_app_iff /=. tauto.
-Qed.
-
-Lemma mortal_bounded {K x} : steps K x = None -> bounded K x.
-Proof.
-  move=> HK.
-  exists (map (fun oy => if oy is Some y then y else x) (path K x)).
-  split. { by rewrite map_length path_length. }
-  move=> y [k]. have [?|?] : k < K \/ K <= k by lia.
-  - move=> Hk. apply /in_map_iff. exists (Some y).
-    split; first done.
-    rewrite -Hk. by apply: In_pathI.
-  - by move: HK => /(steps_k_monotone k) /(_ ltac:(lia)) ->.
-Qed.
-
-Lemma In_None_pathE k x :
-  In None (path k x) -> steps k x = None.
-Proof.
-  move=> /In_pathE [k' [?]] /(steps_k_monotone k). apply. lia.
-Qed.
-
-Lemma NoDup_not_bounded {K x y} : 
-  steps K x = Some y -> NoDup (path (K + 1) x) -> not (bounded K x).
-Proof.
-  move=> Hxy HK [L [? HL]].
-  apply: (pigeonhole option_Config_eq_dec (path (K+1) x) (map Some L)).
-  - move=> [z|] /in_map_iff [k] [Hk] /in_seq ?.
-    { apply /in_map_iff. exists z. split; first done.
-      apply: HL. by exists k. }
-    by move: Hk Hxy => /(steps_k_monotone K) /(_ ltac:(lia)) ->.
-  - rewrite map_length path_length. lia.
-  - done.
-Qed.
-
-Lemma boundedE {K x} : bounded K x ->
-  (In (steps K x) (path K x)) + (steps K x = None).
-Proof.
-  move=> HK.
-  case Hy: (steps K x) => [y|]; last by right.
-  have [?|] := In_dec option_Config_eq_dec (Some y) (path K x).
-  { by left. }
-  rewrite -Hy. move=> /path_noloopI /NoDup_not_bounded.
-  by move=> /(_ y Hy HK).
-Qed.
+#[local] Notation steps := (CM2.steps M).
+#[local] Notation bounded := (CM2.bounded M).
+#[local] Notation step := (CM2.step M).
+#[local] Notation reaches := (CM2.reaches M).
+#[local] Notation path := (CM2_facts.path M).
 
 Lemma pointwise_decision K x : {bounded K x} + {not (bounded K x)}.
 Proof.
@@ -276,9 +138,6 @@ Proof.
   move=> H _. by apply: (H y).
 Qed.
 
-Lemma bounded_monotone {k k' x} : k <= k' -> bounded k x -> bounded k' x.
-Proof. move=> ? [L [? ?]]. exists L. split; [lia|done]. Qed.
-
 Notation l := (length M).
 
 (* from an arbitrary config arrive at config with at least one large value *)
@@ -314,24 +173,6 @@ Proof.
     move: H => [k] [+ /in_seq ?].
     move=> /(steps_k_monotone (l*n*n+1)) /(_ ltac:(lia)).
     by rewrite Hxy.
-Qed.
-
-Lemma shift_steps_k_b k p a b n : 
-  steps k (p, (a, k)) = Some (p, (a, b)) ->
-  forall i, i <= n -> steps (i*k) (p, (a, n*k)) = Some (p, (a, i*b + (n-i)*k)).
-Proof.
-  move=> Hk i.
-  have [b' [-> ->]] : exists b', n * k = n * k + b' /\ (n - i) * k = (n - i) * k + b'.
-  { exists 0. lia. }
-  elim: i n b'. { move=> ???. congr (Some (_, (_, _))). lia. }
-  move=> i IH [|n] b' ?; first by lia.
-  rewrite /= /steps iter_plus -/(steps _ _).
-  rewrite -?Nat.add_assoc.
-  rewrite shift_steps_b; first by lia.
-  rewrite Hk. have := IH n (b+b') ltac:(lia).
-  congr eq.
-  - congr steps. congr (_, (_, _)). lia.
-  - congr (Some (_, (_, _))). lia.
 Qed.
 
 Lemma k_step_iter k p a1 b1 a2 b2 :
@@ -516,16 +357,6 @@ Proof.
   - move=> [<-]. by left.
   - rewrite /= obind_oiter /CM2.step.
     by case: (state x); rewrite /= oiter_None.
-Qed.
-
-Lemma reaches_bounded {K k x y} : steps k x = Some y -> bounded K y -> bounded (k+K) x.
-Proof.
-  move=> Hxy /boundedE [HK|HK].
-  - apply: loop_bounded.
-    move: Hxy (Hxy) => /path_plus -> /steps_plus ->.
-    apply /in_app_iff. by right.
-  - apply: mortal_bounded.
-    by move: Hxy => /steps_plus ->.
 Qed.
 
 (* informative decision statement for uniform boundedness for Cm2 *)

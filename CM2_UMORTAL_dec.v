@@ -9,33 +9,17 @@ Section BoundConstruction.
 
 Variable M : Cm2.
 
-Notation bounded := (bounded M).
+#[local] Notation bounded := (bounded M).
 
 (* uniform bound *)
 Variable K : nat.
 Variable HK : forall x, bounded K x.
 
-Notation step := (CM2.step M).
-Notation steps := (CM2.steps M).
-Notation mortal := (CM2.mortal M).
-Notation reaches_plus := (CM2_facts.reaches_plus M).
-Notation non_terminating := (CM2_facts.non_terminating M).
-
-(*
-Lemma bounded_inf k x : bounded k x -> {L | (length L <= k) /\ (forall (y: Config), reaches M x y -> In y L) }.
-Proof.
-  move=> Hkx. exists (map (fun n => if steps n x is Some y then y else x) (seq 0 k)).
-  split; first by rewrite map_length seq_length.
-  move=> y Hxy. admit. (* hard, doable *)
-Admitted.
-
-
-Lemma pointwise_decision k x : (mortal k x) + (not (mortal k x)).
-Proof. rewrite /mortal. by case: (steps k x) => [y|]; [right|left]. Qed.
-*)
-
-
-
+#[local] Notation step := (CM2.step M).
+#[local] Notation steps := (CM2.steps M).
+#[local] Notation mortal := (CM2.mortal M).
+#[local] Notation reaches_plus := (CM2_facts.reaches_plus M).
+#[local] Notation non_terminating := (CM2_facts.non_terminating M).
 
 Lemma mortal_bound k x : mortal k x -> mortal K x.
 Proof.
@@ -161,7 +145,7 @@ Section BoundRefutation.
 Variable M : Cm2.
 Variable HM : not (uniformly_bounded M).
 
-Notation steps := (CM2.steps M).
+#[local] Notation steps := (CM2.steps M).
 
 (* an unbounded machine is immortal *)
 Lemma not_uniformly_mortal : not (uniformly_mortal M).

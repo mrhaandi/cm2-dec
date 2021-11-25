@@ -53,12 +53,12 @@ Definition step' (x: Config) : option Config :=
 Definition steps' n x : option Config :=
   Nat.iter n (obind step') (Some x).
 
-Notation step := (CM2.step M).
-Notation steps := (CM2.steps M).
-Notation terminating := (CM2.terminating M).
-Notation non_terminating := (CM2_facts.non_terminating M).
-Notation reaches := (CM2.reaches M).
-Notation reaches_plus := (CM2_facts.reaches_plus M).
+#[local] Notation step := (CM2.step M).
+#[local] Notation steps := (CM2.steps M).
+#[local] Notation terminating := (CM2.terminating M).
+#[local] Notation non_terminating := (CM2_facts.non_terminating M).
+#[local] Notation reaches := (CM2.reaches M).
+#[local] Notation reaches_plus := (CM2_facts.reaches_plus M).
 
 Definition reaches' x y := exists k, steps' k x = Some y.
 
