@@ -10,8 +10,8 @@
     Decidability of Two-counter Minsky Machine Halting (MM2_HALT_dec)
     Decidability of Two-counter Machine Reversibility (CM2_REV_dec)
     Decidability of Reversible Two-counter Machine Halting (CM2_REV_HALT_dec)
-    Decidability ofTwo-counter Machine Uniform Boundedness (CM2_UBOUNDED_dec)
-    Decidability ofTwo-counter Machine Uniform Mortality (CM2_UMORTAL_dec)
+    Decidability of Two-counter Machine Uniform Boundedness (CM2_UBOUNDED_dec)
+    Decidability of Two-counter Machine Uniform Mortality (CM2_UMORTAL_dec)
 *)
 
 Require M2.MM2 M2.MM2_HALT_dec.
